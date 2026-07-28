@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Orchestration.App.Views;
 using Orchestration.Core.Models;
@@ -101,15 +102,61 @@ public sealed partial class MainWindow
         };
     }
 
+    private string _shellKind = "powershell";
+    private string _workingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+    /// <summary>
+    /// Launched through the shell rather than directly, because CreateProcess with a null
+    /// application name only finds .exe. On this machine `claude` happens to be claude.exe, but
+    /// `codex` is codex.ps1 — a script CreateProcess cannot run at all, and npm .cmd shims are
+    /// just as common. The shell resolves all three, and -NoExit keeps the prompt open so a
+    /// missing CLI reports itself inside the terminal instead of vanishing.
+    /// </summary>
+    private static string CommandLineFor(string kind) => kind switch
+    {
+        "claude" => "powershell.exe -NoLogo -NoExit -Command claude",
+        "codex" => "powershell.exe -NoLogo -NoExit -Command codex",
+        _ => "powershell.exe -NoLogo"
+    };
+
+    private static string LabelFor(string kind) => kind switch
+    {
+        "claude" => "Novo Claude",
+        "codex" => "Novo Codex",
+        _ => "Novo terminal"
+    };
+
+    /// <summary>SplitButton.Click is a TypedEventHandler, not the RoutedEventHandler the rest use.</summary>
+    private void OnNewTerminalClicked(SplitButton sender, SplitButtonClickEventArgs e) =>
+        OnNewTerminal(sender, new RoutedEventArgs());
+
+    private void OnPickShell(object sender, RoutedEventArgs e)
+    {
+        _shellKind = (string)((FrameworkElement)sender).Tag;
+        NewTerminalLabel.Text = LabelFor(_shellKind);
+        OnNewTerminal(sender, e);
+    }
+
+    private async void OnPickWorkingDirectory(object sender, RoutedEventArgs e)
+    {
+        var picker = new Windows.Storage.Pickers.FolderPicker();
+        picker.FileTypeFilter.Add("*");
+        // WinUI 3 pickers are windowless COM objects; without an owner handle they throw.
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+
+        var folder = await picker.PickSingleFolderAsync();
+        if (folder is not null) _workingDirectory = folder.Path;
+    }
+
     private void OnNewTerminal(object sender, RoutedEventArgs e)
     {
         var (x, y) = NextSpawnPoint();
         Materialize(new TerminalNode
         {
-            Title = "terminal",
+            Title = LabelFor(_shellKind),
             X = x, Y = y, Width = 720, Height = 420,
-            CommandLine = "powershell.exe -NoLogo",
-            WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+            CommandLine = CommandLineFor(_shellKind),
+            WorkingDirectory = _workingDirectory
         });
     }
 
