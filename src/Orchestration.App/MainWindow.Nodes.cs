@@ -90,7 +90,14 @@ public sealed partial class MainWindow
         }
 
         handle.PointerReleased += EndDrag;
-        handle.PointerCaptureLost += (s, e) => dragging = false;
+        handle.PointerCaptureLost += (s, e) =>
+        {
+            // PointerMoved has already written the new position into the model, so losing capture
+            // to a focus steal still has to schedule the save that PointerReleased would have.
+            if (!dragging) return;
+            dragging = false;
+            _autosave.Touch();
+        };
     }
 
     private void OnNewTerminal(object sender, RoutedEventArgs e)
@@ -134,6 +141,10 @@ public sealed partial class MainWindow
                 AddNode(view, view, model);
                 break;
             }
+            // LoadWorkspace clears the node list before materializing, so a kind that silently
+            // fell through here would be dropped from memory and then erased from disk.
+            default:
+                throw new NotSupportedException($"No view for node kind {model.GetType().Name}.");
         }
     }
 }

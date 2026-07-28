@@ -106,6 +106,9 @@ public sealed partial class MainWindow
                 .HasFlag(CoreVirtualKeyStates.Down);
             if (shiftDown) _offsetX += delta; else _offsetY += delta;
             foreach (var node in _nodes) PlaceNode(node);
+            // SaveCamera is the only thing that copies the offsets into the model, so skipping it
+            // here would let a later unrelated save write a stale camera over the real one.
+            SaveCamera();
         }
         e.Handled = true;
     }

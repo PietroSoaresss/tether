@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\pietr\\dev\\orchestration\\src\\Orchestration.Core\\Orchestration.Core.csproj": {}
+    "C:\\Users\\agrossdobrasil\\Desktop\\pietro\\tether\\src\\Orchestration.Core\\Orchestration.Core.csproj": {}
   },
   "projects": {
-    "C:\\Users\\pietr\\dev\\orchestration\\src\\Orchestration.Core\\Orchestration.Core.csproj": {
+    "C:\\Users\\agrossdobrasil\\Desktop\\pietro\\tether\\src\\Orchestration.Core\\Orchestration.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\pietr\\dev\\orchestration\\src\\Orchestration.Core\\Orchestration.Core.csproj",
+        "projectUniqueName": "C:\\Users\\agrossdobrasil\\Desktop\\pietro\\tether\\src\\Orchestration.Core\\Orchestration.Core.csproj",
         "projectName": "Orchestration.Core",
-        "projectPath": "C:\\Users\\pietr\\dev\\orchestration\\src\\Orchestration.Core\\Orchestration.Core.csproj",
-        "packagesPath": "C:\\Users\\pietr\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\pietr\\dev\\orchestration\\src\\Orchestration.Core\\obj\\",
+        "projectPath": "C:\\Users\\agrossdobrasil\\Desktop\\pietro\\tether\\src\\Orchestration.Core\\Orchestration.Core.csproj",
+        "packagesPath": "C:\\Users\\agrossdobrasil\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\agrossdobrasil\\Desktop\\pietro\\tether\\src\\Orchestration.Core\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\pietr\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\agrossdobrasil\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -58,7 +58,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Users\\pietr\\.dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.423/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

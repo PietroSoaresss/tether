@@ -2228,6 +2228,10 @@ private void Materialize(NodeBase model)
             AddNode(view, view, model);
             break;
         }
+        // LoadWorkspace clears the node list before materializing, so a kind that silently
+        // fell through here would be dropped from memory and then erased from disk.
+        default:
+            throw new NotSupportedException($"No view for node kind {model.GetType().Name}.");
     }
 }
 ```
@@ -2248,9 +2252,22 @@ void EndDrag(object s, PointerRoutedEventArgs e)
 }
 ```
 
+E o `PointerCaptureLost` logo abaixo, que hoje só zera a flag — perder a captura para um roubo de foco é um fim de drag como outro qualquer, e `PointerMoved` já escreveu a posição nova no modelo:
+
+```csharp
+handle.PointerCaptureLost += (s, e) =>
+{
+    // PointerMoved has already written the new position into the model, so losing capture
+    // to a focus steal still has to schedule the save that PointerReleased would have.
+    if (!dragging) return;
+    dragging = false;
+    _autosave.Touch();
+};
+```
+
 - [ ] **Step 3: Persistir a câmera**
 
-Em `src/Orchestration.App/MainWindow.Canvas.cs`, no fim de `OnCanvasPointerReleased` e no fim de `OnResetView`, e no ramo do zoom em `OnCanvasWheel` (logo depois de `ApplyLayout();`), acrescentar:
+Em `src/Orchestration.App/MainWindow.Canvas.cs`, em **quatro** lugares — no fim de `OnCanvasPointerReleased`, no fim de `OnResetView`, no ramo do zoom em `OnCanvasWheel` (logo depois de `ApplyLayout();`) e no ramo do pan por roda (logo depois do `foreach (var node in _nodes) PlaceNode(node);`) — acrescentar:
 
 ```csharp
         SaveCamera();
@@ -2267,6 +2284,8 @@ private void SaveCamera()
     _autosave.Touch();
 }
 ```
+
+Os quatro são obrigatórios: `SaveCamera` é a **única** coisa que copia `_offsetX/_offsetY/_zoom` para o modelo, então um caminho que muda a câmera sem chamá-la faz um save posterior qualquer gravar a câmera velha por cima da certa.
 
 - [ ] **Step 4: Ligar tudo no construtor**
 
@@ -2310,7 +2329,9 @@ public sealed partial class MainWindow : Window
 
         _offsetX = _workspace.Camera.OffsetX;
         _offsetY = _workspace.Camera.OffsetY;
-        _zoom = _workspace.Camera.Zoom;
+        // A hand-edited file can carry a zero zoom, and both the spawn point and the drag delta
+        // divide by it.
+        _zoom = Math.Clamp(_workspace.Camera.Zoom, MinZoom, MaxZoom);
 
         // Materialize appends to _workspace.Nodes, so iterate a snapshot and start from empty.
         var saved = _workspace.Nodes.ToList();
@@ -2322,8 +2343,10 @@ public sealed partial class MainWindow : Window
         if (_store.LastLoadOutcome == ReadOutcome.Backup)
             ShowRecoveryNotice("O workspace principal estava corrompido. Recuperado a partir do backup.");
 
-        // A first run has nothing to show, and an empty canvas teaches nothing.
-        if (saved.Count == 0)
+        // A first run has nothing to show, and an empty canvas teaches nothing. Keyed off the read
+        // outcome rather than the node count: a user who deleted every node meant it, and seeding
+        // on count alone would resurrect nodes on every launch and overwrite their empty workspace.
+        if (_store.LastLoadOutcome == ReadOutcome.None)
         {
             OnNewTerminal(this, new RoutedEventArgs());
             OnNewNote(this, new RoutedEventArgs());
@@ -2332,8 +2355,25 @@ public sealed partial class MainWindow : Window
 
     private void SaveWorkspace()
     {
-        // Autosave fires on a timer thread; the model is only safe to read on the UI thread.
-        DispatcherQueue.TryEnqueue(() => _store.Save(_workspace));
+        // Autosave fires on a timer thread, so the model has to be read on the UI thread. But at
+        // window close FlushNow() calls this from the Closed handler, already on the UI thread,
+        // and the queue never pumps again — enqueueing there would drop the user's last edits.
+        if (DispatcherQueue.HasThreadAccess) SaveNow();
+        else DispatcherQueue.TryEnqueue(SaveNow);
+    }
+
+    private void SaveNow()
+    {
+        try
+        {
+            _store.Save(_workspace);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // A transient lock from antivirus or a sync client must not take the process down
+            // on a one-second timer. Losing one write costs a second; crashing costs the session.
+            ShowRecoveryNotice($"Nao foi possivel salvar o workspace: {e.Message}");
+        }
     }
 
     private void ShowRecoveryNotice(string message)

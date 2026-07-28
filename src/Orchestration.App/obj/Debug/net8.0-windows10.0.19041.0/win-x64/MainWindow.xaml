@@ -12,21 +12,21 @@
 
         <StackPanel Orientation="Horizontal" Spacing="8" Padding="12,8"
                     Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}">
-            <Button x:ConnectionId='4'                      >
+            <Button x:ConnectionId='5'                      >
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <FontIcon Glyph="&#xE756;" FontSize="14" />
                     <TextBlock Text="Novo terminal" />
                 </StackPanel>
             </Button>
-            <Button x:ConnectionId='5'                  >
+            <Button x:ConnectionId='6'                  >
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <FontIcon Glyph="&#xE70B;" FontSize="14" />
                     <TextBlock Text="Nova nota" />
                 </StackPanel>
             </Button>
             <AppBarSeparator />
-            <Button x:ConnectionId='6' Content="Ajustar zoom"                     />
-            <TextBlock x:ConnectionId='7' x:Name="ZoomLabel" VerticalAlignment="Center"
+            <Button x:ConnectionId='7' Content="Ajustar zoom"                     />
+            <TextBlock x:ConnectionId='8' x:Name="ZoomLabel" VerticalAlignment="Center"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             <TextBlock VerticalAlignment="Center" Margin="12,0,0,0"
                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
@@ -41,6 +41,11 @@
                                                        
                                                              
                                                         />
+            <InfoBar x:ConnectionId='4' x:Name="RecoveryBar"
+                     Severity="Warning"
+                     IsOpen="False"
+                     VerticalAlignment="Top"
+                     Margin="12" />
         </Grid>
     </Grid>
 </Window>

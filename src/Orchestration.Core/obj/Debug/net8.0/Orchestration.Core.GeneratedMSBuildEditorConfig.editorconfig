@@ -8,6 +8,6 @@ build_property.PlatformNeutralAssembly =
 build_property.EnforceExtendedAnalyzerRules = 
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = Orchestration.Core
-build_property.ProjectDir = C:\Users\pietr\dev\orchestration\src\Orchestration.Core\
+build_property.ProjectDir = C:\Users\agrossdobrasil\Desktop\pietro\tether\src\Orchestration.Core\
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
