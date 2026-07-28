@@ -18,8 +18,11 @@
 - **Não regredir o `STARTF_USESTDHANDLES`** em `ConPtySession.Start`. Nenhuma task deste plano toca esse arquivo.
 - Zoom nunca vira `ScaleTransform` — WebView2 não é composto pelo XAML. Continua sendo posição/tamanho × zoom.
 - Rodar os testes sem tocar no projeto WinUI: `dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj`. Compilar a solução inteira exige o Windows App SDK; os testes não.
-- O .NET SDK 8.0.423 está em `%USERPROFILE%\.dotnet` e já no PATH do usuário.
-- Um commit por task, mensagem em Conventional Commits.
+- Um commit por task, mensagem em Conventional Commits, em inglês, contendo só os arquivos daquela task.
+
+> **Toolchain — lido em 28/07/2026, antes de executar.** Esta máquina **não tem .NET SDK**: nada no PATH, nada em `%USERPROFILE%\.dotnet` nem em `C:\Program Files\dotnet`, `DOTNET_ROOT` vazio. A afirmação do `PLANO.md` de que o SDK 8.0.423 está em `%USERPROFILE%\.dotnet` descreve **outra máquina** (`C:\Users\pietr\dev\orchestration`) e não vale para este checkout.
+>
+> Decisão do Pietro em 28/07/2026: executar o plano mesmo assim, transcrevendo o código sem rodar nada, e validar depois de instalar o SDK. Consequência a assumir: **nenhuma task deste plano tem evidência RED/GREEN**, e os passos de verificação (`dotnet test`, `dotnet build`, `dotnet run`, a validação manual contra o `codex` na Task 3) ficaram **pendentes**, não cumpridos. Antes de confiar em qualquer parte disto, instalar o SDK 8 e rodar `dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj` de ponta a ponta.
 
 **Antes da Task 1**, criar a branch de trabalho:
 
