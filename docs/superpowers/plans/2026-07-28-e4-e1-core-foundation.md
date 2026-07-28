@@ -366,8 +366,9 @@ public class TurnCollapserTests
     public void Append_OverwriteShorterThanTheLine_KeepsTheTail()
     {
         var collapser = new TurnCollapser();
+        // CR homes the cursor; "xy" overwrites two cells and "cdef" survives untouched.
         collapser.Append("abcdef\rxy");
-        Assert.Equal("xydef", collapser.Result);
+        Assert.Equal("xycdef", collapser.Result);
     }
 
     [Fact]
