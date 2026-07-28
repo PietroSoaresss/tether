@@ -10,9 +10,9 @@ namespace Orchestration.Core.Terminal;
 /// </summary>
 public sealed class AnsiFilter
 {
-    private enum State { Ground, Escape, Csi, StringSeq, StringSeqEscape }
+    private enum State { Ground, Escape, EscapeIntermediate, Csi, StringSeq, StringSeqEscape }
 
-    // A CSI longer than this is malformed; bail out rather than buffer forever.
+    // A CSI longer than this is malformed; stop buffering rather than grow forever.
     private const int MaxCsiLength = 64;
 
     private readonly Decoder _decoder = Encoding.UTF8.GetDecoder();
@@ -20,7 +20,7 @@ public sealed class AnsiFilter
     private State _state = State.Ground;
     private char[] _chars = new char[1024];
 
-    /// <summary>True while the child is painting on the alternate screen buffer (ESC[?1049h).</summary>
+    /// <summary>True while the child is painting on an alternate screen buffer (ESC[?1049h, ?1047, ?47).</summary>
     public bool InAltScreen { get; private set; }
 
     public string Feed(ReadOnlySpan<byte> chunk)
@@ -54,15 +54,26 @@ public sealed class AnsiFilter
                 if (c == '[') { _csi.Clear(); _state = State.Csi; }
                 // OSC, DCS, PM, APC and SOS all run until a string terminator.
                 else if (c is ']' or 'P' or '^' or '_' or 'X') _state = State.StringSeq;
-                // Everything else is a two-character escape (ESC 7, ESC =, ESC c ...).
+                // An intermediate byte means a longer form such as the charset designation
+                // ESC ( 0, which curses-style TUIs emit for box drawing. Treating it as a
+                // two-character escape would spill its final byte into the output.
+                else if (c >= '\x20' && c <= '\x2f') _state = State.EscapeIntermediate;
+                // Everything else really is two characters (ESC 7, ESC =, ESC c ...).
                 else _state = State.Ground;
+                break;
+
+            case State.EscapeIntermediate:
+                // Intermediates may repeat; anything outside their range is the final byte.
+                if (c < '\x20' || c > '\x2f') _state = State.Ground;
                 break;
 
             case State.Csi:
                 // Parameter and intermediate bytes are 0x20-0x3F, the final byte is 0x40-0x7E.
                 if (c >= '\x40' && c <= '\x7e') { FinishCsi(c); _state = State.Ground; }
-                else if (_csi.Length >= MaxCsiLength) _state = State.Ground;
-                else _csi.Append(c);
+                // Stop buffering an overlong, malformed CSI but keep consuming it. Returning
+                // to Ground here would emit the rest of the sequence as literal text, which is
+                // the exact opposite of this class's job.
+                else if (_csi.Length < MaxCsiLength) _csi.Append(c);
                 break;
 
             case State.StringSeq:

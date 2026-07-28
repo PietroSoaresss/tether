@@ -121,7 +121,18 @@ public class AnsiFilterTests
     public void Feed_RecoversFromAnAbsurdlyLongCsi()
     {
         var filter = new AnsiFilter();
+        // The sequence must still be consumed to its final byte; bailing out early would
+        // spill the leftover parameter bytes into the output as text.
         string garbage = "\x1b[" + new string('0', 200) + "m" + "ok";
-        Assert.EndsWith("ok", filter.Feed(Encoding.UTF8.GetBytes(garbage)));
+        Assert.Equal("ok", filter.Feed(Encoding.UTF8.GetBytes(garbage)));
+    }
+
+    [Fact]
+    public void Feed_StripsCharsetDesignationEscapes()
+    {
+        var filter = new AnsiFilter();
+        // ESC ( 0 selects DEC special graphics for box drawing, ESC ( B returns to ASCII.
+        // These are three bytes, not two, so the final byte must not reach the output.
+        Assert.Equal("ok", filter.Feed(Encoding.UTF8.GetBytes("\x1b(0\x1b(Bok")));
     }
 }

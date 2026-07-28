@@ -204,8 +204,19 @@ public class AnsiFilterTests
     public void Feed_RecoversFromAnAbsurdlyLongCsi()
     {
         var filter = new AnsiFilter();
+        // The sequence must still be consumed to its final byte; bailing out early would
+        // spill the leftover parameter bytes into the output as text.
         string garbage = "\x1b[" + new string('0', 200) + "m" + "ok";
-        Assert.EndsWith("ok", filter.Feed(Encoding.UTF8.GetBytes(garbage)));
+        Assert.Equal("ok", filter.Feed(Encoding.UTF8.GetBytes(garbage)));
+    }
+
+    [Fact]
+    public void Feed_StripsCharsetDesignationEscapes()
+    {
+        var filter = new AnsiFilter();
+        // ESC ( 0 selects DEC special graphics for box drawing, ESC ( B returns to ASCII.
+        // These are three bytes, not two, so the final byte must not reach the output.
+        Assert.Equal("ok", filter.Feed(Encoding.UTF8.GetBytes("\x1b(0\x1b(Bok")));
     }
 }
 ```
@@ -235,9 +246,9 @@ namespace Orchestration.Core.Terminal;
 /// </summary>
 public sealed class AnsiFilter
 {
-    private enum State { Ground, Escape, Csi, StringSeq, StringSeqEscape }
+    private enum State { Ground, Escape, EscapeIntermediate, Csi, StringSeq, StringSeqEscape }
 
-    // A CSI longer than this is malformed; bail out rather than buffer forever.
+    // A CSI longer than this is malformed; stop buffering rather than grow forever.
     private const int MaxCsiLength = 64;
 
     private readonly Decoder _decoder = Encoding.UTF8.GetDecoder();
@@ -279,15 +290,26 @@ public sealed class AnsiFilter
                 if (c == '[') { _csi.Clear(); _state = State.Csi; }
                 // OSC, DCS, PM, APC and SOS all run until a string terminator.
                 else if (c is ']' or 'P' or '^' or '_' or 'X') _state = State.StringSeq;
-                // Everything else is a two-character escape (ESC 7, ESC =, ESC c ...).
+                // An intermediate byte means a longer form such as the charset designation
+                // ESC ( 0, which curses-style TUIs emit for box drawing. Treating it as a
+                // two-character escape would spill its final byte into the output.
+                else if (c >= '\x20' && c <= '\x2f') _state = State.EscapeIntermediate;
+                // Everything else really is two characters (ESC 7, ESC =, ESC c ...).
                 else _state = State.Ground;
+                break;
+
+            case State.EscapeIntermediate:
+                // Intermediates may repeat; anything outside their range is the final byte.
+                if (c < '\x20' || c > '\x2f') _state = State.Ground;
                 break;
 
             case State.Csi:
                 // Parameter and intermediate bytes are 0x20-0x3F, the final byte is 0x40-0x7E.
                 if (c >= '\x40' && c <= '\x7e') { FinishCsi(c); _state = State.Ground; }
-                else if (_csi.Length >= MaxCsiLength) _state = State.Ground;
-                else _csi.Append(c);
+                // Stop buffering an overlong, malformed CSI but keep consuming it. Returning
+                // to Ground here would emit the rest of the sequence as literal text, which is
+                // the exact opposite of this class's job.
+                else if (_csi.Length < MaxCsiLength) _csi.Append(c);
                 break;
 
             case State.StringSeq:
@@ -319,7 +341,7 @@ public sealed class AnsiFilter
 dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj --filter "FullyQualifiedName~AnsiFilterTests"
 ```
 
-Esperado: PASS, 10 testes.
+Esperado: PASS, 11 testes.
 
 - [ ] **Step 5: Commit**
 
@@ -813,7 +835,7 @@ Esperado: PASS, 7 testes.
 dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj
 ```
 
-Esperado: PASS, 28 testes (3 antigos + 10 + 8 + 7).
+Esperado: PASS, 29 testes (3 antigos + 11 + 8 + 7).
 
 - [ ] **Step 7: Commit**
 
@@ -1901,7 +1923,7 @@ Esperado: PASS, 5 testes.
 dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj
 ```
 
-Esperado: PASS, 54 testes (3 antigos + 10 + 8 + 7 + 4 + 7 + 7 + 3 + 5).
+Esperado: PASS, 55 testes (3 antigos + 11 + 8 + 7 + 4 + 7 + 7 + 3 + 5).
 
 - [ ] **Step 6: Commit**
 
