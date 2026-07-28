@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="xterm.css" />
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #0c0c0c; overflow: hidden; }
+    #term { height: 100%; width: 100%; }
+    .xterm-viewport::-webkit-scrollbar { width: 10px; }
+    .xterm-viewport::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <div id="term"></div>
+  <script src="xterm.js"></script>
+  <script src="addon-fit.js"></script>
+  <script>
+    const host = window.chrome.webview;
+
+    const term = new Terminal({
+      fontFamily: 'Cascadia Mono, Consolas, monospace',
+      fontSize: 14,
+      cursorBlink: true,
+      allowProposedApi: true,
+      scrollback: 5000,
+      theme: { background: '#0c0c0c', foreground: '#cccccc' }
+    });
+    const fit = new FitAddon.FitAddon();
+    term.loadAddon(fit);
+    term.open(document.getElementById('term'));
+
+    function bytesFromBase64(b64) {
+      const bin = atob(b64);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+
+    // Keystrokes out to the host, which forwards them to the pseudoconsole's stdin.
+    term.onData(d => host.postMessage(JSON.stringify({ t: 'i', d })));
+
+    let lastCols = 0, lastRows = 0;
+    function reportSize() {
+      fit.fit();
+      if (term.cols !== lastCols || term.rows !== lastRows) {
+        lastCols = term.cols; lastRows = term.rows;
+        host.postMessage(JSON.stringify({ t: 'size', cols: term.cols, rows: term.rows }));
+      }
+    }
+
+    host.addEventListener('message', e => {
+      const m = JSON.parse(e.data);
+      if (m.t === 'o') {
+        // Raw VT bytes: xterm keeps its own decoder state across writes, so split
+        // escape sequences and UTF-8 code points survive chunk boundaries.
+        term.write(bytesFromBase64(m.d));
+      } else if (m.t === 'font') {
+        term.options.fontSize = m.size;
+        reportSize();
+      } else if (m.t === 'fit') {
+        reportSize();
+      } else if (m.t === 'focus') {
+        term.focus();
+      }
+    });
+
+    new ResizeObserver(() => reportSize()).observe(document.getElementById('term'));
+    reportSize();
+    host.postMessage(JSON.stringify({ t: 'ready', cols: term.cols, rows: term.rows }));
+  </script>
+</body>
+</html>

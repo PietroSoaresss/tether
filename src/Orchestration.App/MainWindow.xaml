@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Orchestration.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" Padding="12,8"
+                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}">
+            <Button Click="OnNewTerminal">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE756;" FontSize="14" />
+                    <TextBlock Text="Novo terminal" />
+                </StackPanel>
+            </Button>
+            <Button Click="OnNewNote">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE70B;" FontSize="14" />
+                    <TextBlock Text="Nova nota" />
+                </StackPanel>
+            </Button>
+            <AppBarSeparator />
+            <Button Content="Ajustar zoom" Click="OnResetView" />
+            <TextBlock x:Name="ZoomLabel" VerticalAlignment="Center"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock VerticalAlignment="Center" Margin="12,0,0,0"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                       Text="arraste o fundo para mover  ·  Ctrl+roda para zoom" />
+        </StackPanel>
+
+        <Grid x:Name="Viewport" Grid.Row="1"
+              Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+              SizeChanged="OnViewportSizeChanged">
+            <Canvas x:Name="World" Background="Transparent"
+                    PointerPressed="OnCanvasPointerPressed"
+                    PointerMoved="OnCanvasPointerMoved"
+                    PointerReleased="OnCanvasPointerReleased"
+                    PointerWheelChanged="OnCanvasWheel" />
+        </Grid>
+    </Grid>
+</Window>
