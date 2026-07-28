@@ -708,8 +708,27 @@ public class IdleDetectorTests
         time.Advance(Idle);
         var result = await detector.Completion;
 
-        detector.Push(Utf8("tarde demais\n"));
+        // result is an immutable snapshot, so asserting on it alone would hold even without
+        // the guard. InAltScreen is the one piece of detector state still readable after the
+        // turn ends, so it is what actually proves the late chunk was dropped.
+        detector.Push(Utf8("\x1b[?1049htarde demais\n"));
         Assert.DoesNotContain("tarde", result.Text);
+        Assert.False(detector.InAltScreen);
+    }
+
+    [Fact]
+    public async Task Completion_ReportsTimeout_WhenTheTargetNeverSaysAnything()
+    {
+        var time = new FakeTimeProvider();
+        using var detector = new IdleDetector(Idle, Timeout, time);
+
+        // Nothing was ever pushed. Resolving as Idle here would be indistinguishable from
+        // "the agent answered nothing"; the hard timeout is the honest report.
+        time.Advance(Timeout);
+
+        var result = await detector.Completion;
+        Assert.Equal(TurnOutcome.Timeout, result.Outcome);
+        Assert.Equal("", result.Text);
     }
 
     [Fact]
@@ -761,6 +780,7 @@ public sealed record TurnResult(string Text, TurnOutcome Outcome);
 public sealed class IdleDetector : IDisposable
 {
     private readonly TimeSpan _idle;
+    private readonly TimeProvider _time;
     private readonly AnsiFilter _filter = new();
     private readonly TurnCollapser _collapser = new();
     private readonly TaskCompletionSource<TurnResult> _completion =
@@ -769,16 +789,20 @@ public sealed class IdleDetector : IDisposable
 
     private ITimer? _idleTimer;
     private ITimer? _timeoutTimer;
+    private long _lastPush;
     private bool _finished;
 
     public IdleDetector(TimeSpan idle, TimeSpan timeout, TimeProvider? time = null)
     {
         _idle = idle;
-        TimeProvider provider = time ?? TimeProvider.System;
+        _time = time ?? TimeProvider.System;
 
-        // Both timers start now: a target that never says anything still has to resolve.
-        _idleTimer = provider.CreateTimer(_ => Complete(TurnOutcome.Idle), null, idle, System.Threading.Timeout.InfiniteTimeSpan);
-        _timeoutTimer = provider.CreateTimer(_ => Complete(TurnOutcome.Timeout), null, timeout, System.Threading.Timeout.InfiniteTimeSpan);
+        // The idle timer stays disarmed until the first Push. Before the target has said
+        // anything there is no quiescence to detect, and resolving as Idle with empty text
+        // would tell the caller "it answered nothing" when the truth is "we never heard from
+        // it". The hard timeout already bounds that case, with an outcome worth acting on.
+        _idleTimer = _time.CreateTimer(_ => OnIdleElapsed(), null, System.Threading.Timeout.InfiniteTimeSpan, System.Threading.Timeout.InfiniteTimeSpan);
+        _timeoutTimer = _time.CreateTimer(_ => Complete(TurnOutcome.Timeout), null, timeout, System.Threading.Timeout.InfiniteTimeSpan);
     }
 
     public Task<TurnResult> Completion => _completion.Task;
@@ -795,8 +819,31 @@ public sealed class IdleDetector : IDisposable
         {
             if (_finished) return;
             _collapser.Append(_filter.Feed(chunk));
+            _lastPush = _time.GetTimestamp();
             _idleTimer?.Change(_idle, System.Threading.Timeout.InfiniteTimeSpan);
         }
+    }
+
+    /// <summary>
+    /// Change cannot recall a callback that already fired. Without this re-check, a Push that
+    /// loses that race lets the stale callback end the turn microseconds after fresh output
+    /// arrived, truncating the answer with no diagnostic — the exact failure this class exists
+    /// to prevent. So the callback re-reads the clock and rearms instead of trusting itself.
+    /// </summary>
+    private void OnIdleElapsed()
+    {
+        lock (_gate)
+        {
+            if (_finished) return;
+
+            TimeSpan since = _time.GetElapsedTime(_lastPush);
+            if (since < _idle)
+            {
+                _idleTimer?.Change(_idle - since, System.Threading.Timeout.InfiniteTimeSpan);
+                return;
+            }
+        }
+        Complete(TurnOutcome.Idle);
     }
 
     /// <summary>Ends the turn early, e.g. when the target process exits.</summary>
@@ -827,7 +874,7 @@ public sealed class IdleDetector : IDisposable
 dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj --filter "FullyQualifiedName~IdleDetectorTests"
 ```
 
-Esperado: PASS, 7 testes.
+Esperado: PASS, 8 testes.
 
 - [ ] **Step 6: Run the whole suite**
 
@@ -835,7 +882,7 @@ Esperado: PASS, 7 testes.
 dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj
 ```
 
-Esperado: PASS, 29 testes (3 antigos + 11 + 8 + 7).
+Esperado: PASS, 30 testes (3 antigos + 11 + 8 + 8).
 
 - [ ] **Step 7: Commit**
 
@@ -1332,7 +1379,7 @@ public static class AtomicFile
 dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj --filter "FullyQualifiedName~AtomicFileTests"
 ```
 
-Esperado: PASS, 7 testes.
+Esperado: PASS, 8 testes.
 
 - [ ] **Step 5: Commit**
 
@@ -1574,7 +1621,7 @@ public sealed class WorkspaceStore
 dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj --filter "FullyQualifiedName~WorkspaceStoreTests"
 ```
 
-Esperado: PASS, 7 testes.
+Esperado: PASS, 8 testes.
 
 - [ ] **Step 5: Commit**
 
@@ -1923,7 +1970,7 @@ Esperado: PASS, 5 testes.
 dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj
 ```
 
-Esperado: PASS, 55 testes (3 antigos + 11 + 8 + 7 + 4 + 7 + 7 + 3 + 5).
+Esperado: PASS, 56 testes (3 antigos + 11 + 8 + 8 + 4 + 7 + 7 + 3 + 5).
 
 - [ ] **Step 6: Commit**
 

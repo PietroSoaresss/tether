@@ -22,6 +22,7 @@ public sealed record TurnResult(string Text, TurnOutcome Outcome);
 public sealed class IdleDetector : IDisposable
 {
     private readonly TimeSpan _idle;
+    private readonly TimeProvider _time;
     private readonly AnsiFilter _filter = new();
     private readonly TurnCollapser _collapser = new();
     private readonly TaskCompletionSource<TurnResult> _completion =
@@ -30,16 +31,20 @@ public sealed class IdleDetector : IDisposable
 
     private ITimer? _idleTimer;
     private ITimer? _timeoutTimer;
+    private long _lastPush;
     private bool _finished;
 
     public IdleDetector(TimeSpan idle, TimeSpan timeout, TimeProvider? time = null)
     {
         _idle = idle;
-        TimeProvider provider = time ?? TimeProvider.System;
+        _time = time ?? TimeProvider.System;
 
-        // Both timers start now: a target that never says anything still has to resolve.
-        _idleTimer = provider.CreateTimer(_ => Complete(TurnOutcome.Idle), null, idle, System.Threading.Timeout.InfiniteTimeSpan);
-        _timeoutTimer = provider.CreateTimer(_ => Complete(TurnOutcome.Timeout), null, timeout, System.Threading.Timeout.InfiniteTimeSpan);
+        // The idle timer stays disarmed until the first Push. Before the target has said
+        // anything there is no quiescence to detect, and resolving as Idle with empty text
+        // would tell the caller "it answered nothing" when the truth is "we never heard from
+        // it". The hard timeout already bounds that case, with an outcome worth acting on.
+        _idleTimer = _time.CreateTimer(_ => OnIdleElapsed(), null, System.Threading.Timeout.InfiniteTimeSpan, System.Threading.Timeout.InfiniteTimeSpan);
+        _timeoutTimer = _time.CreateTimer(_ => Complete(TurnOutcome.Timeout), null, timeout, System.Threading.Timeout.InfiniteTimeSpan);
     }
 
     public Task<TurnResult> Completion => _completion.Task;
@@ -56,8 +61,31 @@ public sealed class IdleDetector : IDisposable
         {
             if (_finished) return;
             _collapser.Append(_filter.Feed(chunk));
+            _lastPush = _time.GetTimestamp();
             _idleTimer?.Change(_idle, System.Threading.Timeout.InfiniteTimeSpan);
         }
+    }
+
+    /// <summary>
+    /// Change cannot recall a callback that already fired. Without this re-check, a Push that
+    /// loses that race lets the stale callback end the turn microseconds after fresh output
+    /// arrived, truncating the answer with no diagnostic — the exact failure this class exists
+    /// to prevent. So the callback re-reads the clock and rearms instead of trusting itself.
+    /// </summary>
+    private void OnIdleElapsed()
+    {
+        lock (_gate)
+        {
+            if (_finished) return;
+
+            TimeSpan since = _time.GetElapsedTime(_lastPush);
+            if (since < _idle)
+            {
+                _idleTimer?.Change(_idle - since, System.Threading.Timeout.InfiniteTimeSpan);
+                return;
+            }
+        }
+        Complete(TurnOutcome.Idle);
     }
 
     /// <summary>Ends the turn early, e.g. when the target process exits.</summary>

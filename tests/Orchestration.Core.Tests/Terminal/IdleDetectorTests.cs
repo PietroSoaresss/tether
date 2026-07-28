@@ -98,8 +98,27 @@ public class IdleDetectorTests
         time.Advance(Idle);
         var result = await detector.Completion;
 
-        detector.Push(Utf8("tarde demais\n"));
+        // result is an immutable snapshot, so asserting on it alone would hold even without
+        // the guard. InAltScreen is the one piece of detector state still readable after the
+        // turn ends, so it is what actually proves the late chunk was dropped.
+        detector.Push(Utf8("\x1b[?1049htarde demais\n"));
         Assert.DoesNotContain("tarde", result.Text);
+        Assert.False(detector.InAltScreen);
+    }
+
+    [Fact]
+    public async Task Completion_ReportsTimeout_WhenTheTargetNeverSaysAnything()
+    {
+        var time = new FakeTimeProvider();
+        using var detector = new IdleDetector(Idle, Timeout, time);
+
+        // Nothing was ever pushed. Resolving as Idle here would be indistinguishable from
+        // "the agent answered nothing"; the hard timeout is the honest report.
+        time.Advance(Timeout);
+
+        var result = await detector.Completion;
+        Assert.Equal(TurnOutcome.Timeout, result.Outcome);
+        Assert.Equal("", result.Text);
     }
 
     [Fact]
