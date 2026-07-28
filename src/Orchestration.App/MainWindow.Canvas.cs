@@ -72,6 +72,7 @@ public sealed partial class MainWindow
         if (!_panning) return;
         _panning = false;
         World.ReleasePointerCapture(e.Pointer);
+        SaveCamera();
     }
 
     private void OnCanvasWheel(object sender, PointerRoutedEventArgs e)
@@ -96,6 +97,7 @@ public sealed partial class MainWindow
             _offsetY = point.Position.Y - (point.Position.Y - _offsetY) * ratio;
             _zoom = next;
             ApplyLayout();
+            SaveCamera();
         }
         else
         {
@@ -113,5 +115,14 @@ public sealed partial class MainWindow
         _zoom = 1.0;
         _offsetX = _offsetY = 0;
         ApplyLayout();
+        SaveCamera();
+    }
+
+    private void SaveCamera()
+    {
+        _workspace.Camera.OffsetX = _offsetX;
+        _workspace.Camera.OffsetY = _offsetY;
+        _workspace.Camera.Zoom = _zoom;
+        _autosave.Touch();
     }
 }

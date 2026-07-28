@@ -41,6 +41,11 @@
                     PointerMoved="OnCanvasPointerMoved"
                     PointerReleased="OnCanvasPointerReleased"
                     PointerWheelChanged="OnCanvasWheel" />
+            <InfoBar x:Name="RecoveryBar"
+                     Severity="Warning"
+                     IsOpen="False"
+                     VerticalAlignment="Top"
+                     Margin="12" />
         </Grid>
     </Grid>
 </Window>
