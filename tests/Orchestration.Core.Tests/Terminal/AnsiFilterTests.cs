@@ -32,7 +32,9 @@ public class AnsiFilterTests
     public void Feed_DropsOtherControlCharacters()
     {
         var filter = new AnsiFilter();
-        Assert.Equal("ab", filter.Feed(Encoding.UTF8.GetBytes("\x07a\x00b")));
+        // \u escapes, not \x: C# lets \x swallow 1-4 hex digits, so "\x07a" is U+007A ('z')
+        // and "\x00b" is U+000B, which quietly turns this into a different test.
+        Assert.Equal("ab", filter.Feed(Encoding.UTF8.GetBytes("\u0007a\u0000b")));
     }
 
     [Fact]

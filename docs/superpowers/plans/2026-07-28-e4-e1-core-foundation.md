@@ -20,9 +20,13 @@
 - Rodar os testes sem tocar no projeto WinUI: `dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj`. Compilar a solução inteira exige o Windows App SDK; os testes não.
 - Um commit por task, mensagem em Conventional Commits, em inglês, contendo só os arquivos daquela task.
 
-> **Toolchain — lido em 28/07/2026, antes de executar.** Esta máquina **não tem .NET SDK**: nada no PATH, nada em `%USERPROFILE%\.dotnet` nem em `C:\Program Files\dotnet`, `DOTNET_ROOT` vazio. A afirmação do `PLANO.md` de que o SDK 8.0.423 está em `%USERPROFILE%\.dotnet` descreve **outra máquina** (`C:\Users\pietr\dev\orchestration`) e não vale para este checkout.
+> **Toolchain — 28/07/2026.** O SDK **8.0.423** foi instalado nesta máquina via `winget install Microsoft.DotNet.SDK.8` e vive em `C:\Program Files\dotnet`. A nota do `PLANO.md` dizendo que ele está em `%USERPROFILE%\.dotnet` descreve **outra máquina** (`C:\Users\pietr\dev\orchestration`); não vale para este checkout.
 >
-> Decisão do Pietro em 28/07/2026: executar o plano mesmo assim, transcrevendo o código sem rodar nada, e validar depois de instalar o SDK. Consequência a assumir: **nenhuma task deste plano tem evidência RED/GREEN**, e os passos de verificação (`dotnet test`, `dotnet build`, `dotnet run`, a validação manual contra o `codex` na Task 3) ficaram **pendentes**, não cumpridos. Antes de confiar em qualquer parte disto, instalar o SDK 8 e rodar `dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj` de ponta a ponta.
+> As Tasks 1–8 foram escritas antes da instalação, sem rodar nada, e só depois validadas de uma vez: **56/56 passando**. Isso significa que elas não têm ciclo RED/GREEN task a task — o vermelho nunca foi observado antes do verde. A suíte passando é a evidência que existe.
+>
+> A primeira execução pegou um defeito que oito rodadas de leitura cuidadosa (implementadores e revisores) não pegaram: `"\x07a\x00b"` não é BEL+`a`+NUL+`b`. Em C# `\x` consome de 1 a 4 dígitos hex, então aquilo é `'z'` (U+007A) seguido de U+000B, e o teste media outra coisa. **Usar `\u` (sempre 4 dígitos) e nunca `\x` em literais de teste.**
+>
+> Continua **pendente**: a validação manual da Task 3 Step 8 contra um `codex` real, que é o que confirma ou derruba o risco de alt-screen.
 
 **Antes da Task 1**, criar a branch de trabalho:
 
@@ -115,7 +119,9 @@ public class AnsiFilterTests
     public void Feed_DropsOtherControlCharacters()
     {
         var filter = new AnsiFilter();
-        Assert.Equal("ab", filter.Feed(Encoding.UTF8.GetBytes("\x07a\x00b")));
+        // \u escapes, not \x: C# lets \x swallow 1-4 hex digits, so "\x07a" is U+007A ('z')
+        // and "\x00b" is U+000B, which quietly turns this into a different test.
+        Assert.Equal("ab", filter.Feed(Encoding.UTF8.GetBytes("\u0007a\u0000b")));
     }
 
     [Fact]
