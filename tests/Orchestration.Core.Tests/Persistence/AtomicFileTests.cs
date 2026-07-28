@@ -71,7 +71,21 @@ public class AtomicFileTests : IDisposable
     }
 
     [Fact]
-    public void TryRead_ReturnsNoneWhenNothingIsUsable()
+    public void TryRead_StillFallsBackToTheBackupWhenThePrimaryIsLocked()
+    {
+        AtomicFile.Write(Path0, "{\"Value\":\"bom\"}");
+        AtomicFile.Write(Path0, "{\"Value\":\"mais novo\"}");
+
+        using var held = new FileStream(Path0, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var outcome = AtomicFile.TryRead<Box>(Path0, Parse, out var box);
+
+        Assert.Equal(ReadOutcome.Backup, outcome);
+        Assert.Equal("bom", box!.Value);
+    }
+
+    [Fact]
+    public void TryRead_ReturnsNoneWhenNothingIsOnDisk()
     {
         var outcome = AtomicFile.TryRead<Box>(Path0, Parse, out var box);
 
@@ -80,12 +94,28 @@ public class AtomicFileTests : IDisposable
     }
 
     [Fact]
-    public void TryRead_ReturnsNoneWhenEverythingIsCorrupt()
+    public void TryRead_ReturnsUnreadableWhenEverythingIsCorrupt()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path0)!);
         File.WriteAllText(Path0, "lixo");
         File.WriteAllText(Path0 + ".bak", "lixo tambem");
 
-        Assert.Equal(ReadOutcome.None, AtomicFile.TryRead<Box>(Path0, Parse, out _));
+        Assert.Equal(ReadOutcome.Unreadable, AtomicFile.TryRead<Box>(Path0, Parse, out _));
+    }
+
+    [Fact]
+    public void TryRead_ReturnsUnreadableWhenTheOnlyCandidateIsLocked()
+    {
+        AtomicFile.Write(Path0, "{\"Value\":\"ok\"}");
+
+        // Antivirus, a sync client or a second instance holding the handle is the everyday cause:
+        // the content is perfectly good, we simply cannot see it. Reporting None here would tell
+        // the caller to start fresh and let it overwrite a file that was never damaged.
+        using var held = new FileStream(Path0, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var outcome = AtomicFile.TryRead<Box>(Path0, Parse, out var box);
+
+        Assert.Equal(ReadOutcome.Unreadable, outcome);
+        Assert.Null(box);
     }
 }

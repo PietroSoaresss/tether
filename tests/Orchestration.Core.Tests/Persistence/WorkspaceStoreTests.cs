@@ -106,6 +106,89 @@ public class WorkspaceStoreTests : IDisposable
     }
 
     [Fact]
+    public void Load_WithANullCamera_YieldsAUsableCamera()
+    {
+        WriteWorkspace("""
+            { "Version": 0, "Camera": null, "Nodes": [], "Connections": [] }
+            """);
+
+        var workspace = new WorkspaceStore(_paths).Load();
+
+        Assert.NotNull(workspace.Camera);
+        Assert.Equal(1.0, workspace.Camera.Zoom);
+    }
+
+    [Fact]
+    public void Load_WithNullNodes_YieldsAnEmptyList()
+    {
+        WriteWorkspace("""
+            { "Version": 1, "Camera": { "Zoom": 1 }, "Nodes": null, "Connections": [] }
+            """);
+
+        var workspace = new WorkspaceStore(_paths).Load();
+
+        Assert.NotNull(workspace.Nodes);
+        Assert.Empty(workspace.Nodes);
+    }
+
+    [Fact]
+    public void Load_WithNullConnections_YieldsAnEmptyList()
+    {
+        WriteWorkspace("""
+            { "Version": 1, "Camera": { "Zoom": 1 }, "Nodes": [], "Connections": null }
+            """);
+
+        var workspace = new WorkspaceStore(_paths).Load();
+
+        Assert.NotNull(workspace.Connections);
+        Assert.Empty(workspace.Connections);
+    }
+
+    [Fact]
+    public void Load_DropsNullEntriesFromTheNodeList()
+    {
+        WriteWorkspace("""
+            { "Version": 1, "Camera": { "Zoom": 1 }, "Nodes": [ null ], "Connections": [] }
+            """);
+
+        var workspace = new WorkspaceStore(_paths).Load();
+
+        Assert.Empty(workspace.Nodes);
+    }
+
+    [Fact]
+    public void Load_ClampsAZeroZoomOnACurrentVersionFile()
+    {
+        WriteWorkspace("""
+            { "Version": 1, "Camera": { "OffsetX": 0, "OffsetY": 0, "Zoom": 0 }, "Nodes": [], "Connections": [] }
+            """);
+
+        var workspace = new WorkspaceStore(_paths).Load();
+
+        // The migration only repaired version 0, so a current-version file carried the divide by
+        // zero straight through to the canvas.
+        Assert.Equal(Camera.DefaultZoom, workspace.Camera.Zoom);
+    }
+
+    [Fact]
+    public void Load_ClampsAnOutOfRangeZoom()
+    {
+        WriteWorkspace("""
+            { "Version": 1, "Camera": { "Zoom": 900 }, "Nodes": [], "Connections": [] }
+            """);
+
+        var workspace = new WorkspaceStore(_paths).Load();
+
+        Assert.Equal(Camera.MaxZoom, workspace.Camera.Zoom);
+    }
+
+    private void WriteWorkspace(string json)
+    {
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(_paths.WorkspaceFile, json);
+    }
+
+    [Fact]
     public void Save_StampsTheCurrentVersion()
     {
         var store = new WorkspaceStore(_paths);

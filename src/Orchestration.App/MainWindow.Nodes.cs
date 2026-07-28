@@ -35,7 +35,8 @@ public sealed partial class MainWindow
         PlaceNode(entry);
         node.ApplyZoom(_zoom);
         RegisterDrag(entry);
-        _autosave.Touch();
+        // AddNode serves both the toolbar and the load path; only the former is a user edit.
+        if (!_loading) _autosave.Touch();
     }
 
     /// <summary>Stagger new nodes in world space so they do not land on top of each other.</summary>

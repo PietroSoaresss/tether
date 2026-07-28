@@ -9,8 +9,14 @@ public enum ReadOutcome
     Primary,
     /// <summary>The primary was missing or unusable and the .bak saved us.</summary>
     Backup,
-    /// <summary>Nothing usable on disk; the caller should start fresh.</summary>
-    None
+    /// <summary>Nothing was on disk at all; the caller should start fresh.</summary>
+    None,
+    /// <summary>
+    /// A file was there but nothing could be read or parsed from it. Distinct from
+    /// <see cref="None"/> because starting fresh here means writing over content that may be
+    /// perfectly good and merely locked.
+    /// </summary>
+    Unreadable
 }
 
 /// <summary>
@@ -40,10 +46,12 @@ public static class AtomicFile
     {
         ReadOutcome[] outcomes = { ReadOutcome.Primary, ReadOutcome.Backup };
         string[] candidates = { path, path + ".bak" };
+        bool anyCandidateExisted = false;
 
         for (int i = 0; i < candidates.Length; i++)
         {
             if (!File.Exists(candidates[i])) continue;
+            anyCandidateExisted = true;
             try
             {
                 T? parsed = parse(File.ReadAllText(candidates[i]));
@@ -57,6 +65,8 @@ public static class AtomicFile
         }
 
         value = null;
-        return ReadOutcome.None;
+        // A caller that seeds a fresh document treats None as permission to write. Saying None for
+        // a file we merely failed to open would hand it that permission over intact content.
+        return anyCandidateExisted ? ReadOutcome.Unreadable : ReadOutcome.None;
     }
 }
