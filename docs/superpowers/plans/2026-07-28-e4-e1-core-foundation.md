@@ -1379,7 +1379,7 @@ public static class AtomicFile
 dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj --filter "FullyQualifiedName~AtomicFileTests"
 ```
 
-Esperado: PASS, 8 testes.
+Esperado: PASS, 7 testes.
 
 - [ ] **Step 5: Commit**
 
@@ -1621,7 +1621,7 @@ public sealed class WorkspaceStore
 dotnet test tests/Orchestration.Core.Tests/Orchestration.Core.Tests.csproj --filter "FullyQualifiedName~WorkspaceStoreTests"
 ```
 
-Esperado: PASS, 8 testes.
+Esperado: PASS, 7 testes.
 
 - [ ] **Step 5: Commit**
 
