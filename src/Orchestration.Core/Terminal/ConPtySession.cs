@@ -42,7 +42,12 @@ public sealed class ConPtySession : IDisposable
     /// <summary>Fires once when the child process ends. Argument is the exit code.</summary>
     public event Action<int>? Exited;
 
-    public void Start(string commandLine, string? workingDirectory = null, short columns = 120, short rows = 30)
+    public void Start(
+        string commandLine,
+        string? workingDirectory = null,
+        short columns = 120,
+        short rows = 30,
+        IReadOnlyDictionary<string, string>? extraEnvironment = null)
     {
         if (State != SessionState.NotStarted) throw new InvalidOperationException("Session already started.");
         if (columns < 1 || rows < 1) throw new ArgumentOutOfRangeException(nameof(columns), "Terminal size must be positive.");
@@ -65,6 +70,7 @@ public sealed class ConPtySession : IDisposable
         if (hr != 0) throw new Win32Exception(hr, "CreatePseudoConsole failed.");
 
         IntPtr attributeList = IntPtr.Zero;
+        IntPtr environment = IntPtr.Zero;
         try
         {
             attributeList = BuildAttributeList(_pseudoConsole);
@@ -78,8 +84,11 @@ public sealed class ConPtySession : IDisposable
 
             const uint flags = Native.EXTENDED_STARTUPINFO_PRESENT | Native.CREATE_UNICODE_ENVIRONMENT;
 
+            if (extraEnvironment is not null)
+                environment = Marshal.StringToHGlobalUni(EnvironmentBlock.Build(extraEnvironment));
+
             if (!Native.CreateProcess(null, commandLine, IntPtr.Zero, IntPtr.Zero, false, flags,
-                                      IntPtr.Zero, workingDirectory, ref startupInfo, out Native.ProcessInformation pi))
+                                      environment, workingDirectory, ref startupInfo, out Native.ProcessInformation pi))
                 throw new Win32Exception(Marshal.GetLastWin32Error(), $"CreateProcess failed for: {commandLine}");
 
             _processHandle = pi.hProcess;
@@ -95,6 +104,7 @@ public sealed class ConPtySession : IDisposable
                 Native.DeleteProcThreadAttributeList(attributeList);
                 Marshal.FreeHGlobal(attributeList);
             }
+            if (environment != IntPtr.Zero) Marshal.FreeHGlobal(environment);
         }
 
         _writer = new FileStream(_inputWrite, FileAccess.Write, bufferSize: 1, isAsync: false);

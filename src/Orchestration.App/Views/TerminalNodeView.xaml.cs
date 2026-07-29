@@ -1,9 +1,11 @@
 using System.Text;
 using System.Text.Json;
+using System.Globalization;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
 using Orchestration.Core.Terminal;
@@ -20,16 +22,36 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     private readonly List<byte> _pendingOutput = new();
     private bool _flushScheduled;
     private bool _pageReady;
+    private bool _selected;
     private ConPtySession? _session;
     private double _baseFontSize = 14;
+    private double _lastZoom = 1;
+    private string _fontFamily = "Cascadia Mono, Consolas, monospace";
+    private string _title = "terminal";
     private short _cols = 80, _rows = 24;
 
     public string CommandLine { get; set; } = "powershell.exe -NoLogo";
+    public string Title
+    {
+        get => _title;
+        set
+        {
+            _title = value;
+            if (TitleText is not null) TitleText.Text = value;
+        }
+    }
     public string? StartDirectory { get; set; }
+    public string? InitialInput { get; set; }
+    public IReadOnlyDictionary<string, string>? ExtraEnvironment { get; set; }
     public UIElement DragHandle => HeaderBar;
+    public UIElement ConnectionSurface => ConnectionSurfaceElement;
+    public UIElement ResizeGrip => ResizeGripElement;
+    public bool IsRunning => _session?.State == SessionState.Running;
 
     /// <summary>Raised for every chunk the child writes. This is the tap point the pipe engine will use.</summary>
     public event Action<byte[]>? OutputProduced;
+    public event Action<int>? ProcessExited;
+    public event Action? Starting;
 
     public event Action<TerminalNodeView>? CloseRequested;
 
@@ -43,7 +65,17 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
-        TitleText.Text = CommandLine;
+        TitleText.Text = Title;
+        string command = CommandLine.ToLowerInvariant();
+        KindText.Text = command.Contains("claude") ? "CLAUDE"
+            : command.Contains("codex") ? "CODEX"
+            : "TERMINAL";
+
+        string directory = StartDirectory
+            ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string folder = Path.GetFileName(Path.TrimEndingDirectorySeparator(directory));
+        ProjectText.Text = string.IsNullOrWhiteSpace(folder) ? directory : folder;
+        ToolTipService.SetToolTip(ProjectText, directory);
 
         await EnvironmentLock.WaitAsync();
         try
@@ -87,6 +119,7 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
             case "ready":
                 _pageReady = true;
                 ReadSize(message);
+                ApplyZoom(_lastZoom);
                 Start();
                 break;
 
@@ -114,6 +147,7 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     public void Start()
     {
         if (_session is not null || !_pageReady) return;
+        Starting?.Invoke();
 
         var session = new ConPtySession();
         session.OutputReceived += OnSessionOutput;
@@ -121,7 +155,12 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
 
         try
         {
-            session.Start(CommandLine, StartDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), _cols, _rows);
+            session.Start(
+                CommandLine,
+                StartDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                _cols,
+                _rows,
+                ExtraEnvironment);
         }
         catch (Exception ex)
         {
@@ -131,8 +170,13 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
         }
 
         _session = session;
+        if (!string.IsNullOrWhiteSpace(InitialInput))
+        {
+            session.Write(InitialInput + "\r");
+            InitialInput = null;
+        }
         ExitOverlay.Visibility = Visibility.Collapsed;
-        StateDot.Fill = new SolidColorBrush(Colors.LimeGreen);
+        StateDot.Fill = (Brush)Application.Current.Resources["TetherAccentLimeBrush"];
     }
 
     private void OnSessionOutput(byte[] data)
@@ -165,22 +209,53 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
             JsonSerializer.Serialize(new { t = "o", d = Convert.ToBase64String(batch) }));
     }
 
-    private void OnSessionExited(int code) =>
-        _dispatcher.TryEnqueue(() => ShowExited($"Processo saiu (codigo {code})"));
+    private void OnSessionExited(int code)
+    {
+        ProcessExited?.Invoke(code);
+        _dispatcher.TryEnqueue(() => ShowExited($"Processo saiu (código {code})"));
+    }
 
     private void ShowExited(string message)
     {
         ExitText.Text = message;
         ExitOverlay.Visibility = Visibility.Visible;
-        StateDot.Fill = new SolidColorBrush(Colors.OrangeRed);
+        StateDot.Fill = (Brush)Application.Current.Resources["TetherDangerBrush"];
     }
 
     /// <summary>Zoom is applied as layout, never as a transform: the WebView2 surface is not scalable.</summary>
     public void ApplyZoom(double zoom)
     {
+        _lastZoom = zoom;
         if (Web.CoreWebView2 is null || !_pageReady) return;
         Web.CoreWebView2.PostWebMessageAsString(
-            JsonSerializer.Serialize(new { t = "font", size = Math.Clamp(_baseFontSize * zoom, 4, 48) }));
+            JsonSerializer.Serialize(new
+            {
+                t = "font",
+                size = Math.Clamp(_baseFontSize * zoom, 12, 48),
+                family = _fontFamily
+            }));
+    }
+
+    public void ApplySettings(string family, double size)
+    {
+        _fontFamily = family;
+        _baseFontSize = size;
+        ApplyZoom(_lastZoom);
+    }
+
+    public void ApplyAccent(string? color)
+    {
+        if (color?.Length != 7 ||
+            !uint.TryParse(color.AsSpan(1), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint rgb))
+            return;
+
+        byte red = (byte)(rgb >> 16);
+        byte green = (byte)(rgb >> 8);
+        byte blue = (byte)rgb;
+        HeaderBar.Background = new SolidColorBrush(
+            Windows.UI.Color.FromArgb(58, red, green, blue));
+        NodeBorder.BorderBrush = new SolidColorBrush(
+            Windows.UI.Color.FromArgb(220, red, green, blue));
     }
 
     public void FocusTerminal() =>
@@ -190,6 +265,12 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     public void SendInput(string text) => _session?.Write(text);
 
     private void OnRestart(object sender, RoutedEventArgs e)
+    {
+        DisposeSession();
+        Start();
+    }
+
+    public void RestartSession()
     {
         DisposeSession();
         Start();
@@ -210,6 +291,21 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
         _session.Exited -= OnSessionExited;
         _session.Dispose();
         _session = null;
-        StateDot.Fill = new SolidColorBrush(Colors.Gray);
+        StateDot.Fill = (Brush)Application.Current.Resources["TetherAccentVioletBrush"];
     }
+
+    public void SetSelected(bool selected)
+    {
+        _selected = selected;
+        SelectionRing.Opacity = selected ? 1 : 0;
+        if (selected) HoverRing.Opacity = 0;
+    }
+
+    private void OnNodePointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_selected) HoverRing.Opacity = 1;
+    }
+
+    private void OnNodePointerExited(object sender, PointerRoutedEventArgs e) =>
+        HoverRing.Opacity = 0;
 }

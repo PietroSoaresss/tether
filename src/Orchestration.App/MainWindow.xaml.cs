@@ -1,222 +1,248 @@
-using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
+using Orchestration.App.Services;
 using Orchestration.App.Views;
-using Windows.Foundation;
-using Windows.System;
-using Windows.UI.Core;
+using Orchestration.Core.Ipc;
+using Orchestration.Core.Models;
+using Orchestration.Core.Persistence;
 
 namespace Orchestration.App;
 
 public sealed partial class MainWindow : Window
 {
-    private sealed class CanvasNode
-    {
-        public required FrameworkElement View;
-        public required INodeView Node;
-        public double X, Y, Width, Height;
-    }
+    private readonly TetherPaths _paths = new();
+    private WorkspaceStore _store;
+    private readonly NoteFiles _noteFiles;
+    private readonly SettingsStore _settingsStore;
+    private readonly TetherServer _tetherServer;
+    private readonly string _pipeName;
+    private AppSettings _settings;
+    private readonly Autosave _autosave;
+    private Workspace _workspace = new();
 
-    private const double MinZoom = 0.3, MaxZoom = 2.5;
+    /// <summary>Set while LoadWorkspace materializes the saved graph, so it does not look like an edit.</summary>
+    private bool _loading;
 
-    private readonly List<CanvasNode> _nodes = new();
-    private double _zoom = 1.0, _offsetX, _offsetY;
-    private Point _panStart;
-    private bool _panning;
-    private double _spawnCursor;
+    /// <summary>
+    /// Set when the workspace could not be read at all. Something is on disk that we failed to open
+    /// or parse, and an empty in-memory model must never be written over it — not on a timer, and
+    /// not at close either.
+    /// </summary>
+    private bool _saveSuppressed;
 
     public MainWindow()
     {
         InitializeComponent();
-        Title = "Orchestration";
-        UpdateZoomLabel();
+        Title = "Tether";
 
-        // Empty canvas teaches nothing. Until a saved workspace exists, seed one of each.
-        OnNewTerminal(this, new RoutedEventArgs());
-        OnNewNote(this, new RoutedEventArgs());
+        _store = new WorkspaceStore(_paths);
+        _noteFiles = new NoteFiles(_paths);
+        _settingsStore = new SettingsStore(_paths);
+        _settings = _settingsStore.Load();
+        _pipeName = PipeNaming.ForProcess(Environment.ProcessId);
+        _tetherServer = new TetherServer(_pipeName, HandleTetherRequest);
+        _autosave = new Autosave(SaveWorkspace, TimeSpan.FromSeconds(1));
+
+        LoadWorkspace();
+        ApplySettings();
+        RootGrid.KeyDown += (_, e) =>
+        {
+            if (e.OriginalSource is TextBox) return;
+            if (HandleCanvasToolShortcut(e.Key)) e.Handled = true;
+            else if (e.Key == Windows.System.VirtualKey.Delete) DeleteSelection();
+            else if (e.Key == Windows.System.VirtualKey.Escape &&
+                     ConnectionModeToggle.IsChecked == true)
+                ConnectionModeToggle.IsChecked = false;
+            else if (e.Key == Windows.System.VirtualKey.Escape)
+                SetCanvasTool("select");
+        };
 
         Closed += (_, _) =>
         {
+            // Dispose first so no timer can fire into a half-torn-down window, then save
+            // unconditionally. FlushNow would consult _pending, which Fire() clears before it
+            // marshals the save onto a dispatcher queue that stops pumping the moment we close —
+            // a race that silently drops the user's last second of work.
+            _autosave.Dispose();
+            SaveNow();
+            foreach (var watcher in _noteWatchers.Values) watcher.Dispose();
+            _noteReload?.Cancel();
+            _fileTreeWatcher?.Dispose();
+            _fileTreeRefresh?.Cancel();
+            _tetherServer.Dispose();
             foreach (var node in _nodes)
                 if (node.Node is TerminalNodeView terminal) terminal.DisposeSession();
         };
     }
 
-    // ---- canvas transform -------------------------------------------------
-
-    /// <summary>
-    /// Zoom is baked into each node's position and size rather than a RenderTransform:
-    /// WebView2 is not composed by XAML, so scaling it leaves the web content unpainted.
-    /// </summary>
-    private void PlaceNode(CanvasNode node)
+    private void LoadWorkspace()
     {
-        Canvas.SetLeft(node.View, node.X * _zoom + _offsetX);
-        Canvas.SetTop(node.View, node.Y * _zoom + _offsetY);
-        node.View.Width = node.Width * _zoom;
-        node.View.Height = node.Height * _zoom;
-    }
+        var legacyStore = _store;
+        var legacy = legacyStore.Load();
+        ReadOutcome outcome = legacyStore.LastLoadOutcome;
+        string? legacyProject = FindProjectDirectory(legacy);
+        string? activeProject = Directory.Exists(_settings.LastProjectDirectory)
+            ? Path.GetFullPath(_settings.LastProjectDirectory)
+            : legacyProject;
 
-    private void ApplyLayout()
-    {
-        foreach (var node in _nodes)
+        if (activeProject is not null)
         {
-            PlaceNode(node);
-            node.Node.ApplyZoom(_zoom);
-        }
-        UpdateZoomLabel();
-    }
+            var projectPaths = ProjectPaths(activeProject);
+            var projectStore = new WorkspaceStore(projectPaths);
+            bool hasProjectWorkspace =
+                File.Exists(projectPaths.WorkspaceFile) ||
+                File.Exists(projectPaths.WorkspaceFile + ".bak");
 
-    private void UpdateZoomLabel() => ZoomLabel.Text = $"{_zoom * 100:0}%";
+            _store = projectStore;
+            if (hasProjectWorkspace)
+            {
+                _workspace = projectStore.Load();
+                outcome = projectStore.LastLoadOutcome;
+            }
+            else if (legacyProject is not null && SamePath(legacyProject, activeProject))
+            {
+                _workspace = legacy;
+                _workspace.ProjectDirectory = activeProject;
+                try { projectStore.Save(_workspace); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    ShowRecoveryNotice($"Não foi possível mover o canvas para o projeto: {e.Message}");
+                }
+            }
+            else
+            {
+                _workspace = projectStore.Load();
+                outcome = projectStore.LastLoadOutcome;
+            }
 
-    private void OnViewportSizeChanged(object sender, SizeChangedEventArgs e) =>
-        Viewport.Clip = new RectangleGeometry { Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height) };
-
-    // ---- pan and zoom -----------------------------------------------------
-
-    private void OnCanvasPointerPressed(object sender, PointerRoutedEventArgs e)
-    {
-        // Only the empty background pans; pointer events over a node belong to the node.
-        if (!ReferenceEquals(e.OriginalSource, World)) return;
-        _panStart = e.GetCurrentPoint(Viewport).Position;
-        _panning = World.CapturePointer(e.Pointer);
-    }
-
-    private void OnCanvasPointerMoved(object sender, PointerRoutedEventArgs e)
-    {
-        if (!_panning) return;
-        var now = e.GetCurrentPoint(Viewport).Position;
-        _offsetX += now.X - _panStart.X;
-        _offsetY += now.Y - _panStart.Y;
-        _panStart = now;
-        foreach (var node in _nodes) PlaceNode(node);
-    }
-
-    private void OnCanvasPointerReleased(object sender, PointerRoutedEventArgs e)
-    {
-        if (!_panning) return;
-        _panning = false;
-        World.ReleasePointerCapture(e.Pointer);
-    }
-
-    private void OnCanvasWheel(object sender, PointerRoutedEventArgs e)
-    {
-        var point = e.GetCurrentPoint(Viewport);
-        int delta = point.Properties.MouseWheelDelta;
-        if (delta == 0) return;
-
-        bool ctrlDown = InputKeyboardSource
-            .GetKeyStateForCurrentThread(VirtualKey.Control)
-            .HasFlag(CoreVirtualKeyStates.Down);
-
-        if (ctrlDown)
-        {
-            double previous = _zoom;
-            double next = Math.Clamp(_zoom * (delta > 0 ? 1.1 : 1 / 1.1), MinZoom, MaxZoom);
-            if (Math.Abs(next - previous) < 0.0001) return;
-
-            // Keep the world point under the cursor pinned while the scale changes.
-            double ratio = next / previous;
-            _offsetX = point.Position.X - (point.Position.X - _offsetX) * ratio;
-            _offsetY = point.Position.Y - (point.Position.Y - _offsetY) * ratio;
-            _zoom = next;
-            ApplyLayout();
+            _workspace.ProjectDirectory = activeProject;
+            RememberProject(activeProject);
         }
         else
         {
-            bool shiftDown = InputKeyboardSource
-                .GetKeyStateForCurrentThread(VirtualKey.Shift)
-                .HasFlag(CoreVirtualKeyStates.Down);
-            if (shiftDown) _offsetX += delta; else _offsetY += delta;
-            foreach (var node in _nodes) PlaceNode(node);
+            _workspace = legacy;
         }
-        e.Handled = true;
+
+        RestoreWorkspace(outcome);
     }
 
-    private void OnResetView(object sender, RoutedEventArgs e)
+    private void RestoreWorkspace(ReadOutcome outcome)
     {
-        _zoom = 1.0;
-        _offsetX = _offsetY = 0;
+        _offsetX = _workspace.Camera.OffsetX;
+        _offsetY = _workspace.Camera.OffsetY;
+        // WorkspaceStore already clamped this into Camera's range; clamping again here is how the
+        // same invariant ends up half-enforced in two places.
+        _zoom = _workspace.Camera.Zoom;
+
+        var saved = _workspace.Nodes.ToList();
+        string? activeProject = FindProjectDirectory(_workspace);
+        if (activeProject is not null)
+        {
+            _workingDirectory = activeProject;
+            _workspace.ProjectDirectory = activeProject;
+        }
+
+        // Restoring the saved graph is not an edit. AddNode schedules an autosave, so without this
+        // guard every launch writes one second later with no user input — and after a recovery from
+        // .bak that write rotates the corrupt primary into the backup slot, destroying the only
+        // good copy while the user is still reading the warning.
+        _loading = true;
+        try
+        {
+            // Materialize appends to _workspace.Nodes, so iterate a snapshot and start from empty.
+            _workspace.Nodes.Clear();
+            foreach (var model in saved) Materialize(model);
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        UpdateProjectLabel();
+        UpdateZoomLabel();
         ApplyLayout();
-    }
 
-    // ---- nodes ------------------------------------------------------------
+        if (outcome == ReadOutcome.Backup)
+            ShowRecoveryNotice("O workspace principal estava corrompido. Recuperado a partir do backup.");
 
-    private void AddNode(FrameworkElement view, INodeView node, double width, double height)
-    {
-        // Stagger new nodes so they do not land on top of each other.
-        var entry = new CanvasNode
+        // Unreadable means a file is there that we could not open or parse — a lock from antivirus,
+        // a sync client or a second instance. Seeding would schedule a write over content that is
+        // probably intact, so we seed nothing and refuse to save for the rest of the session.
+        if (outcome == ReadOutcome.Unreadable)
         {
-            View = view,
-            Node = node,
-            X = (40 + _spawnCursor * 28 - _offsetX) / _zoom,
-            Y = (40 + _spawnCursor * 28 - _offsetY) / _zoom,
-            Width = width,
-            Height = height
-        };
-        _spawnCursor = (_spawnCursor + 1) % 8;
-
-        _nodes.Add(entry);
-        World.Children.Add(view);
-        PlaceNode(entry);
-        node.ApplyZoom(_zoom);
-        RegisterDrag(entry);
-    }
-
-    private void RemoveNode(FrameworkElement view)
-    {
-        var entry = _nodes.FirstOrDefault(n => ReferenceEquals(n.View, view));
-        if (entry is null) return;
-        _nodes.Remove(entry);
-        World.Children.Remove(view);
-    }
-
-    private void RegisterDrag(CanvasNode entry)
-    {
-        var handle = entry.Node.DragHandle;
-        Point last = default;
-        bool dragging = false;
-
-        handle.PointerPressed += (s, e) =>
-        {
-            last = e.GetCurrentPoint(Viewport).Position;
-            dragging = ((UIElement)s).CapturePointer(e.Pointer);
-            e.Handled = true;
-        };
-
-        handle.PointerMoved += (s, e) =>
-        {
-            if (!dragging) return;
-            var now = e.GetCurrentPoint(Viewport).Position;
-            entry.X += (now.X - last.X) / _zoom;
-            entry.Y += (now.Y - last.Y) / _zoom;
-            last = now;
-            PlaceNode(entry);
-        };
-
-        void EndDrag(object s, PointerRoutedEventArgs e)
-        {
-            if (!dragging) return;
-            dragging = false;
-            ((UIElement)s).ReleasePointerCapture(e.Pointer);
+            _saveSuppressed = true;
+            ShowRecoveryNotice(
+                "Nao foi possivel ler o workspace salvo. Nada sera gravado sobre ele nesta sessao; " +
+                "feche o programa e tente de novo depois de liberar o arquivo.");
+            return;
         }
 
-        handle.PointerReleased += EndDrag;
-        handle.PointerCaptureLost += (s, e) => dragging = false;
+        // A first run has nothing to show, and an empty canvas teaches nothing. Keyed off the read
+        // outcome rather than the node count: a user who deleted every node meant it, and seeding
+        // on count alone would resurrect nodes on every launch and overwrite their empty workspace.
+        if (outcome == ReadOutcome.None)
+        {
+            var first = NextSpawnPoint();
+            CreateTerminal(
+                first.X,
+                first.Y,
+                title: Directory.Exists(_workingDirectory)
+                    ? $"{ProjectName(_workingDirectory)} · Terminal"
+                    : null);
+        }
     }
 
-    private void OnNewTerminal(object sender, RoutedEventArgs e)
+    private static string? FindProjectDirectory(Workspace workspace)
     {
-        var terminal = new TerminalNodeView { CommandLine = "powershell.exe -NoLogo" };
-        terminal.CloseRequested += view => RemoveNode(view);
-        AddNode(terminal, terminal, 720, 420);
+        if (Directory.Exists(workspace.ProjectDirectory))
+            return Path.GetFullPath(workspace.ProjectDirectory);
+
+        return workspace.Nodes.Select(node => node switch
+            {
+                TerminalNode terminal => terminal.WorkingDirectory,
+                NoteNode note => note.WorkingDirectory,
+                _ => ""
+            })
+            .LastOrDefault(Directory.Exists);
     }
 
-    private void OnNewNote(object sender, RoutedEventArgs e)
+    private static bool SamePath(string left, string right) =>
+        string.Equals(
+            Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
+
+    private static TetherPaths ProjectPaths(string projectDirectory) =>
+        new(Path.Combine(projectDirectory, ".tether"));
+
+    private void SaveWorkspace()
     {
-        var note = new NoteNodeView { Markdown = "# Nota\n\nTexto em markdown." };
-        note.CloseRequested += view => RemoveNode(view);
-        AddNode(note, note, 340, 240);
+        // Autosave fires on a timer thread, so the model has to be read on the UI thread. The
+        // close path calls SaveNow directly instead of coming through here, because by then the
+        // queue no longer pumps and an enqueued save would never run.
+        if (DispatcherQueue.HasThreadAccess) SaveNow();
+        else DispatcherQueue.TryEnqueue(SaveNow);
+    }
+
+    private void SaveNow()
+    {
+        if (_saveSuppressed) return;
+
+        try
+        {
+            _store.Save(_workspace);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // A transient lock from antivirus or a sync client must not take the process down
+            // on a one-second timer. Losing one write costs a second; crashing costs the session.
+            ShowRecoveryNotice($"Nao foi possivel salvar o workspace: {e.Message}");
+        }
+    }
+
+    private void ShowRecoveryNotice(string message)
+    {
+        RecoveryBar.Message = message;
+        RecoveryBar.IsOpen = true;
     }
 }
