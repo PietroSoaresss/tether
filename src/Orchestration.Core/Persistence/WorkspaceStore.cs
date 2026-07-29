@@ -54,11 +54,22 @@ public sealed class WorkspaceStore
     private static Workspace Normalize(Workspace workspace)
     {
         workspace.Camera ??= new Camera();
+        workspace.ProjectDirectory ??= "";
         workspace.Nodes ??= new List<NodeBase>();
         workspace.Connections ??= new List<Connection>();
+        workspace.CanvasItems ??= new List<CanvasItem>();
 
         workspace.Nodes.RemoveAll(node => node is null);
         workspace.Connections.RemoveAll(connection => connection is null);
+        workspace.CanvasItems.RemoveAll(item => item is null);
+        foreach (var item in workspace.CanvasItems)
+        {
+            item.Points ??= new List<CanvasPoint>();
+            item.Text ??= "";
+            item.Color ??= "#F5F3F7";
+        }
+        foreach (var terminal in workspace.Nodes.OfType<TerminalNode>())
+            terminal.AccentColor ??= "";
 
         // A zero, negative or non-finite zoom is not "too small", it is absent: snapping it to the
         // minimum would drop the user into a canvas they never zoomed out of.

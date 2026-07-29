@@ -6,5 +6,8 @@ namespace Orchestration.App.Views;
 public interface INodeView
 {
     UIElement DragHandle { get; }
+    UIElement ConnectionSurface { get; }
+    UIElement ResizeGrip { get; }
     void ApplyZoom(double zoom);
+    void SetSelected(bool selected);
 }

@@ -9,6 +9,8 @@ public sealed class AppSettings
     public string TerminalFontFamily { get; set; } = "Cascadia Mono, Consolas, monospace";
     public double TerminalFontSize { get; set; } = 14;
     public Dictionary<string, string> Shortcuts { get; set; } = new();
+    public List<string> RecentProjects { get; set; } = new();
+    public string LastProjectDirectory { get; set; } = "";
 
     /// <summary>Quiescence window that ends a turn, in milliseconds.</summary>
     public int IdleMs { get; set; } = 1500;

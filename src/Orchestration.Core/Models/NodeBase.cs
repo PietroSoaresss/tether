@@ -23,13 +23,17 @@ public sealed class TerminalNode : NodeBase
     public string WorkingDirectory { get; set; } = "";
 
     public bool AutoStart { get; set; }
+    public string AccentColor { get; set; } = "";
 }
 
 public enum NoteViewMode { Raw, Preview }
 
 public sealed class NoteNode : NodeBase
 {
-    /// <summary>File name inside the notes folder. The markdown itself never lives in workspace.json.</summary>
+    /// <summary>Project that owns the note. Its Markdown lives in that project's notes folder.</summary>
+    public string WorkingDirectory { get; set; } = "";
+
+    /// <summary>File name inside the project notes folder. Markdown never lives in workspace.json.</summary>
     public string FileName { get; set; } = "";
 
     public NoteViewMode ViewMode { get; set; } = NoteViewMode.Preview;

@@ -31,4 +31,17 @@
     <ProjectReference Include="..\Orchestration.Core\Orchestration.Core.csproj" />
   </ItemGroup>
 
+  <Target Name="BuildTetherCli" BeforeTargets="Build">
+    <MSBuild Projects="..\Orchestration.Cli\Orchestration.Cli.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);Platform=AnyCPU" />
+  </Target>
+
+  <Target Name="CopyTetherCli" AfterTargets="Build">
+    <ItemGroup>
+      <TetherCliFiles Include="..\Orchestration.Cli\bin\$(Configuration)\net8.0\win-x64\tether*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TetherCliFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

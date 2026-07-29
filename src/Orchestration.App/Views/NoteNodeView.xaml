@@ -4,44 +4,128 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="8">
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+    <Grid x:Name="NodeRoot"
+          PointerEntered="OnNodePointerEntered"
+          PointerExited="OnNodePointerExited">
+        <Border x:Name="NodeBorder"
+                Background="{ThemeResource TetherNodeBrush}"
+                BorderBrush="{ThemeResource TetherBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="44" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-            <Grid x:Name="HeaderBar"
-                  Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
-                  Padding="10,6"
-                  ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+                <Grid x:Name="HeaderBar"
+                      Background="{ThemeResource TetherNodeHeaderBrush}"
+                      Padding="12,0"
+                      ColumnSpacing="9">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                <TextBlock Text="nota" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" />
+                    <Border Padding="6,2"
+                            CornerRadius="4"
+                            Background="{StaticResource TetherBadgeBrush}"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="NOTA"
+                                   Foreground="White"
+                                   FontFamily="Segoe UI Variable Text"
+                                   FontSize="9"
+                                   FontWeight="Bold"
+                                   CharacterSpacing="70" />
+                    </Border>
+                    <TextBlock x:Name="TitleText"
+                               Grid.Column="1"
+                               Text="nota"
+                               VerticalAlignment="Center"
+                               Foreground="{ThemeResource TetherTextPrimaryBrush}"
+                               FontFamily="Segoe UI Variable Text"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis" />
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
-                    <Button Click="OnClose" Padding="6,2" Background="Transparent"
-                            BorderThickness="0" ToolTipService.ToolTip="Remover no">
-                        <FontIcon Glyph="&#xE74D;" FontSize="12" />
-                    </Button>
-                </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+                        <ToggleButton x:Name="PreviewToggle"
+                                      Style="{StaticResource TetherNodeActionToggleStyle}"
+                                      Click="OnTogglePreview"
+                                      ToolTipService.ToolTip="Alternar edição e preview">
+                            <FontIcon Glyph="&#xE890;" FontSize="12" />
+                        </ToggleButton>
+                        <Button Style="{StaticResource TetherDangerNodeActionButtonStyle}"
+                                Click="OnClose"
+                                ToolTipService.ToolTip="Remover nó">
+                            <FontIcon Glyph="&#xE74D;" FontSize="12" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1"
+                      Background="{ThemeResource TetherNodeBrush}">
+                    <TextBox x:Name="Editor"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             Padding="14,12"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             Foreground="{ThemeResource TetherTextPrimaryBrush}"
+                             PlaceholderText="Escreva em Markdown..."
+                             FontFamily="Cascadia Mono, Consolas"
+                             FontSize="13"
+                             TextChanged="OnTextChanged"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                    <ScrollViewer x:Name="PreviewScroller"
+                                  Visibility="Collapsed"
+                                  Padding="14,12">
+                        <RichTextBlock x:Name="Preview"
+                                       Foreground="{ThemeResource TetherTextPrimaryBrush}"
+                                       FontFamily="Segoe UI Variable Text"
+                                       TextWrapping="Wrap"
+                                       IsTextSelectionEnabled="True" />
+                    </ScrollViewer>
+                    <Border x:Name="MissingPanel"
+                            Visibility="Collapsed"
+                            Background="{ThemeResource TetherOverlayBrush}">
+                        <StackPanel VerticalAlignment="Center"
+                                    HorizontalAlignment="Center"
+                                    Spacing="10">
+                            <TextBlock Text="Arquivo da nota ausente"
+                                       Foreground="{StaticResource TetherDangerBrush}"
+                                       FontFamily="Segoe UI Variable Text" />
+                            <Button Content="Recriar"
+                                    Style="{StaticResource TetherToolbarButtonStyle}"
+                                    Click="OnRecreate"
+                                    HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Grid>
-
-            <TextBox x:Name="Editor"
-                     Grid.Row="1"
-                     AcceptsReturn="True"
-                     TextWrapping="Wrap"
-                     BorderThickness="0"
-                     Background="Transparent"
-                     PlaceholderText="Escreva em markdown..."
-                     FontFamily="Cascadia Mono, Consolas"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
-        </Grid>
-    </Border>
+        </Border>
+        <Border x:Name="HoverRing"
+                Margin="-2"
+                BorderBrush="{StaticResource TetherAccentVioletBrush}"
+                BorderThickness="1"
+                CornerRadius="14"
+                Opacity="0"
+                IsHitTestVisible="False" />
+        <Border x:Name="SelectionRing"
+                Margin="-2"
+                BorderBrush="{StaticResource TetherAccentLimeBrush}"
+                BorderThickness="2"
+                CornerRadius="14"
+                Opacity="0"
+                IsHitTestVisible="False" />
+        <Border x:Name="ResizeGripElement" Width="20" Height="20"
+                HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                Background="Transparent"
+                ToolTipService.ToolTip="Redimensionar" />
+        <Border x:Name="ConnectionSurfaceElement"
+                Visibility="Collapsed"
+                Background="Transparent"
+                ToolTipService.ToolTip="Arraste para conectar" />
+    </Grid>
 </UserControl>

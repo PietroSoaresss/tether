@@ -21,7 +21,21 @@ public sealed class SettingsStore
             json => JsonSerializer.Deserialize<AppSettings>(json, TetherJson.Options),
             out var settings);
 
-        return settings ?? new AppSettings();
+        settings ??= new AppSettings();
+        settings.Shortcuts ??= new Dictionary<string, string>();
+        settings.RecentProjects ??= new List<string>();
+        settings.RecentProjects = settings.RecentProjects
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        settings.LastProjectDirectory ??= "";
+        if (string.IsNullOrWhiteSpace(settings.TerminalFontFamily))
+            settings.TerminalFontFamily = new AppSettings().TerminalFontFamily;
+        settings.TerminalFontSize = Math.Clamp(settings.TerminalFontSize, 8, 32);
+        settings.IdleMs = Math.Clamp(settings.IdleMs, 200, 30_000);
+        settings.AskTimeoutMs = Math.Clamp(settings.AskTimeoutMs, 1_000, 600_000);
+        settings.MaxCallDepth = Math.Clamp(settings.MaxCallDepth, 1, 20);
+        return settings;
     }
 
     public void Save(AppSettings settings) =>

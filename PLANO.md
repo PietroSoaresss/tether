@@ -174,3 +174,18 @@ Total: ~7–8 semanas (dev solo, ordem de grandeza).
 4. **F3**: A(`claude`) → B(`claude`) em modo Turn: 3 trocas limpas, sem sequência ANSI vazada nem linha duplicada de redraw; em Realtime: `ping -t` encanado para um shell que registra em arquivo.
 5. **F4**: ciclo A→B→A pausa após K trocas com badge e retomada manual; matar o source com pipe ativo não derruba o app nem o target; instalar via MSIX numa máquina limpa e repetir os testes 2–4.
 6. **Testes unitários no Core** (rodam no CI sem UI): AnsiFilter com sequências partidas em fronteiras arbitrárias (teste propriedade: split aleatório do mesmo stream ⇒ mesmo resultado); TurnSegmenter (quiescência, dedupe); CycleGuard (grafos com/sem ciclo, self-loop); WorkspaceStore (roundtrip + migração de versão + recuperação de `.bak`).
+
+## 12. Escrita e desenho livre no canvas
+
+Implementar como uma camada vetorial própria atrás dos nós e cabos, usando apenas `Canvas`, `Path` e `TextBox` do WinUI. Os elementos vivem nas coordenadas do mundo e recebem a transformação já usada por pan e zoom.
+
+### MVP
+
+1. Régua flutuante com selecionar, mão, texto, lápis, retângulo, elipse, seta e borracha.
+2. Modelo persistido `CanvasItem` com tipo, pontos/retângulo, texto, estilo mínimo e ordem.
+3. Seleção, mover, redimensionar, duplicar, apagar e undo/redo por pilha de comandos local.
+4. Texto inline; ação `Criar nota` gera um `.md` real em `<projeto>/notes/`.
+5. Serialização vetorial no workspace e exportação opcional para SVG.
+6. Teste de roundtrip do modelo e teste manual com pan, zoom, reabertura e 500 elementos.
+
+Ficam fora do primeiro corte: colaboração, imagens incorporadas, bibliotecas de formas, pressão de caneta, Mermaid automático e importação do formato Excalidraw. Adicionar somente quando o editor vetorial básico estiver estável.

@@ -34,6 +34,8 @@ public class SettingsStoreTests : IDisposable
             Theme = AppTheme.Dark,
             TerminalFontSize = 18,
             IdleMs = 900,
+            LastProjectDirectory = @"C:\dev\app",
+            RecentProjects = { @"C:\dev\app", @"C:\dev\site" },
             Shortcuts = { ["novo-terminal"] = "Ctrl+T" }
         });
 
@@ -42,6 +44,8 @@ public class SettingsStoreTests : IDisposable
         Assert.Equal(AppTheme.Dark, loaded.Theme);
         Assert.Equal(18, loaded.TerminalFontSize);
         Assert.Equal(900, loaded.IdleMs);
+        Assert.Equal(@"C:\dev\app", loaded.LastProjectDirectory);
+        Assert.Equal(2, loaded.RecentProjects.Count);
         Assert.Equal("Ctrl+T", loaded.Shortcuts["novo-terminal"]);
     }
 

@@ -67,6 +67,31 @@ public class ConPtySessionTests
         Assert.Equal(SessionState.NotStarted, session.State);
     }
 
+    [Fact]
+    public async Task Start_InjectsExtraEnvironmentWithoutLosingTheInheritedPath()
+    {
+        var output = new StringBuilder();
+        var sawValue = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var session = new ConPtySession();
+        session.OutputReceived += data =>
+        {
+            lock (output)
+            {
+                output.Append(Encoding.UTF8.GetString(data));
+                if (output.ToString().Contains("ENV_OK", StringComparison.Ordinal))
+                    sawValue.TrySetResult(true);
+            }
+        };
+
+        session.Start(
+            "powershell.exe -NoLogo -NoProfile -Command \"Write-Output $env:TETHER_TEST\"",
+            Path.GetTempPath(),
+            extraEnvironment: new Dictionary<string, string> { ["TETHER_TEST"] = "ENV_OK" });
+
+        var completed = await Task.WhenAny(sawValue.Task, Task.Delay(TimeSpan.FromSeconds(20)));
+        Assert.True(completed == sawValue.Task, $"A variavel nao chegou ao filho. Saida:\n{output}");
+    }
+
     private static int Occurrences(string haystack, string needle)
     {
         int count = 0, index = 0;

@@ -15,21 +15,53 @@ public class WorkspaceJsonTests
             X = 10, Y = 20, Width = 720, Height = 420,
             CommandLine = "powershell.exe -NoLogo -NoExit -Command claude",
             WorkingDirectory = @"C:\dev\projeto",
-            AutoStart = true
+            AutoStart = true,
+            AccentColor = "#4CA6FF"
         };
         var note = new NoteNode
         {
             Title = "briefing",
             X = 800, Y = 20, Width = 340, Height = 240,
+            WorkingDirectory = @"C:\dev\projeto",
             FileName = "briefing.md",
             ViewMode = NoteViewMode.Raw
         };
 
         return new Workspace
         {
+            ProjectDirectory = @"C:\dev\projeto",
             Camera = new Camera { OffsetX = -40, OffsetY = 12, Zoom = 1.25 },
             Nodes = { terminal, note },
-            Connections = { new Connection { SourceId = terminal.Id, TargetId = note.Id } }
+            Connections =
+            {
+                new Connection
+                {
+                    SourceId = terminal.Id,
+                    TargetId = note.Id,
+                    SourceAnchorX = .75,
+                    SourceAnchorY = .2,
+                    TargetAnchorX = .15,
+                    TargetAnchorY = .8
+                }
+            },
+            CanvasItems =
+            {
+                new CanvasItem
+                {
+                    Kind = CanvasItemKind.Text,
+                    X = 100,
+                    Y = 80,
+                    Text = "arquitetura",
+                    Color = "#4CA6FF",
+                    Size = 18
+                },
+                new CanvasItem
+                {
+                    Kind = CanvasItemKind.Stroke,
+                    Color = "#C2EF4E",
+                    Points = { new CanvasPoint { X = 1, Y = 2 }, new CanvasPoint { X = 3, Y = 4 } }
+                }
+            }
         };
     }
 
@@ -47,11 +79,18 @@ public class WorkspaceJsonTests
         Assert.Equal("powershell.exe -NoLogo -NoExit -Command claude", terminal.CommandLine);
         Assert.Equal(@"C:\dev\projeto", terminal.WorkingDirectory);
         Assert.True(terminal.AutoStart);
+        Assert.Equal("#4CA6FF", terminal.AccentColor);
         Assert.Equal("briefing.md", note.FileName);
+        Assert.Equal(@"C:\dev\projeto", note.WorkingDirectory);
         Assert.Equal(NoteViewMode.Raw, note.ViewMode);
+        Assert.Equal(@"C:\dev\projeto", loaded.ProjectDirectory);
         Assert.Equal(1.25, loaded.Camera.Zoom);
         Assert.Equal(terminal.Id, loaded.Connections[0].SourceId);
         Assert.False(loaded.Connections[0].Bidirectional);
+        Assert.Equal(.75, loaded.Connections[0].SourceAnchorX);
+        Assert.Equal(.8, loaded.Connections[0].TargetAnchorY);
+        Assert.Equal("arquitetura", loaded.CanvasItems[0].Text);
+        Assert.Equal(2, loaded.CanvasItems[1].Points.Count);
     }
 
     [Fact]
@@ -71,6 +110,8 @@ public class WorkspaceJsonTests
     {
         Assert.Equal(Workspace.CurrentVersion, new Workspace().Version);
         Assert.Equal(1.0, new Camera().Zoom);
+        Assert.Equal(1, new Connection().SourceAnchorX);
+        Assert.Equal(.5, new Connection().TargetAnchorY);
     }
 
     [Fact]

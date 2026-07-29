@@ -1,8 +1,10 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Orchestration.App.Views;
 using Orchestration.Core.Models;
+using Orchestration.Core.Persistence;
 using Windows.Foundation;
 
 namespace Orchestration.App;
@@ -24,6 +26,7 @@ public sealed partial class MainWindow
 
     private readonly List<CanvasNode> _nodes = new();
     private double _spawnCursor;
+    private CanvasNode? _selectedNode;
 
     /// <summary>Adds a node that already has a model — used both by the toolbar and by workspace load.</summary>
     private void AddNode(FrameworkElement view, INodeView node, NodeBase model)
@@ -36,6 +39,7 @@ public sealed partial class MainWindow
         PlaceNode(entry);
         node.ApplyZoom(_zoom);
         RegisterDrag(entry);
+        RegisterGraphNode(entry);
         // AddNode serves both the toolbar and the load path; only the former is a user edit.
         if (!_loading) _autosave.Touch();
     }
@@ -53,10 +57,15 @@ public sealed partial class MainWindow
         var entry = _nodes.FirstOrDefault(n => ReferenceEquals(n.View, view));
         if (entry is null) return;
 
+        if (ReferenceEquals(_wireSource, entry)) CancelWire();
+        if (ReferenceEquals(_selectedNode, entry)) SelectNode(null);
         _nodes.Remove(entry);
         _workspace.Nodes.Remove(entry.Model);
         _workspace.Connections.RemoveAll(c => c.SourceId == entry.Model.Id || c.TargetId == entry.Model.Id);
+        _noteViews.Remove(entry.Model.Id);
+        _terminalViews.Remove(entry.Model.Id);
         World.Children.Remove(view);
+        RenderWires();
         _autosave.Touch();
     }
 
@@ -68,6 +77,9 @@ public sealed partial class MainWindow
 
         handle.PointerPressed += (s, e) =>
         {
+            SelectNode(entry);
+            _selectedWire = null;
+            RenderWires();
             last = e.GetCurrentPoint(Viewport).Position;
             dragging = ((UIElement)s).CapturePointer(e.Pointer);
             e.Handled = true;
@@ -102,8 +114,17 @@ public sealed partial class MainWindow
         };
     }
 
+    private void SelectNode(CanvasNode? entry)
+    {
+        if (ReferenceEquals(_selectedNode, entry)) return;
+        _selectedNode?.Node.SetSelected(false);
+        _selectedNode = entry;
+        _selectedNode?.Node.SetSelected(true);
+        UpdateCanvasToolContext();
+    }
+
     private string _shellKind = "powershell";
-    private string _workingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    private string _workingDirectory = "";
 
     /// <summary>
     /// Launched through the shell rather than directly, because CreateProcess with a null
@@ -137,7 +158,7 @@ public sealed partial class MainWindow
         OnNewTerminal(sender, e);
     }
 
-    private async void OnPickWorkingDirectory(object sender, RoutedEventArgs e)
+    private async void OnOpenProject(object sender, RoutedEventArgs e)
     {
         var picker = new Windows.Storage.Pickers.FolderPicker();
         picker.FileTypeFilter.Add("*");
@@ -145,29 +166,236 @@ public sealed partial class MainWindow
         WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
 
         var folder = await picker.PickSingleFolderAsync();
-        if (folder is not null) _workingDirectory = folder.Path;
+        if (folder is null) return;
+
+        SwitchProject(folder.Path);
+    }
+
+    private void UpdateProjectLabel()
+    {
+        bool available = Directory.Exists(_workingDirectory);
+        ProjectLabel.Text = available ? ProjectName(_workingDirectory) : "Abrir projeto";
+        ToolTipService.SetToolTip(
+            OpenProjectButton,
+            available ? _workingDirectory : "Escolha a pasta do projeto");
+        WatchProjectFiles();
+        RefreshFileTree();
+        RefreshProjectList();
+    }
+
+    private void SwitchProject(string projectDirectory)
+    {
+        string path = Path.GetFullPath(projectDirectory);
+        if (Directory.Exists(_workingDirectory) && SamePath(_workingDirectory, path))
+        {
+            RememberProject(path);
+            return;
+        }
+
+        SaveNow();
+        ClearCanvasForProjectSwitch();
+
+        _saveSuppressed = false;
+        _workingDirectory = path;
+        _store = new WorkspaceStore(ProjectPaths(path));
+        _workspace = _store.Load();
+        _workspace.ProjectDirectory = path;
+        RememberProject(path);
+        RestoreWorkspace(_store.LastLoadOutcome);
+    }
+
+    private void ClearCanvasForProjectSwitch()
+    {
+        CancelWire();
+        SelectNode(null);
+        _selectedWire = null;
+        foreach (var terminal in _terminalViews.Values) terminal.DisposeSession();
+        foreach (var watcher in _noteWatchers.Values) watcher.Dispose();
+        _noteReload?.Cancel();
+        _fileTreeWatcher?.Dispose();
+        _fileTreeRefresh?.Cancel();
+
+        _nodes.Clear();
+        _terminalViews.Clear();
+        _noteViews.Clear();
+        _noteWatchers.Clear();
+        _wirePaths.Clear();
+        _annotationViews.Clear();
+        _askGates.Clear();
+        _askQueues.Clear();
+        _activeChains.Clear();
+        World.Children.Clear();
+        Wires.Children.Clear();
+        Annotations.Children.Clear();
+        _spawnCursor = 0;
+    }
+
+    private void RememberProject(string projectDirectory)
+    {
+        string path = Path.GetFullPath(projectDirectory);
+        _settings.RecentProjects.RemoveAll(recent => SamePath(recent, path));
+        _settings.RecentProjects.Insert(0, path);
+        if (_settings.RecentProjects.Count > 20)
+            _settings.RecentProjects.RemoveRange(20, _settings.RecentProjects.Count - 20);
+        _settings.LastProjectDirectory = path;
+        try { _settingsStore.Save(_settings); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            ShowRecoveryNotice($"Não foi possível salvar os projetos recentes: {e.Message}");
+        }
+        RefreshProjectList();
+    }
+
+    private void OnProjectFilterChanged(object sender, TextChangedEventArgs e) => RefreshProjectList();
+
+    private void OnRecentProject(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string path } && Directory.Exists(path))
+            SwitchProject(path);
+    }
+
+    private void RefreshProjectList()
+    {
+        ProjectList.Children.Clear();
+        string filter = ProjectFilter.Text.Trim();
+        var projects = _settings.RecentProjects
+            .Where(Directory.Exists)
+            .Where(path => filter.Length == 0 ||
+                           ProjectName(path).Contains(filter, StringComparison.CurrentCultureIgnoreCase) ||
+                           path.Contains(filter, StringComparison.CurrentCultureIgnoreCase))
+            .GroupBy(path => ProjectName(Directory.GetParent(path)?.FullName ?? path));
+
+        int count = 0;
+        foreach (var group in projects)
+        {
+            ProjectList.Children.Add(new TextBlock
+            {
+                Text = group.Key,
+                Style = (Style)Application.Current.Resources["TetherProjectGroupStyle"]
+            });
+
+            foreach (string path in group)
+            {
+                bool active = Directory.Exists(_workingDirectory) && SamePath(path, _workingDirectory);
+                var marker = new Border
+                {
+                    Width = 2,
+                    Height = 18,
+                    CornerRadius = new CornerRadius(1),
+                    Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 194, 239, 78)),
+                    Visibility = active ? Visibility.Visible : Visibility.Collapsed
+                };
+                var content = new Grid { ColumnSpacing = 8 };
+                content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2) });
+                content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                Grid.SetColumn(marker, 0);
+                content.Children.Add(marker);
+                var icon = new FontIcon { Glyph = "\uE8B7", FontSize = 13 };
+                Grid.SetColumn(icon, 1);
+                content.Children.Add(icon);
+                var name = new TextBlock
+                {
+                    Text = ProjectName(path),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    FontSize = 12,
+                    FontWeight = active ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                };
+                Grid.SetColumn(name, 2);
+                content.Children.Add(name);
+
+                var button = new Button
+                {
+                    Tag = path,
+                    Content = content,
+                    Style = (Style)Application.Current.Resources["TetherProjectRowStyle"],
+                    Background = active
+                        ? new SolidColorBrush(Windows.UI.Color.FromArgb(54, 121, 98, 140))
+                        : new SolidColorBrush(Microsoft.UI.Colors.Transparent)
+                };
+                ToolTipService.SetToolTip(button, path);
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(
+                    button,
+                    $"Abrir projeto {ProjectName(path)}");
+                button.Click += OnRecentProject;
+                ProjectList.Children.Add(button);
+                count++;
+            }
+        }
+
+        ProjectListEmpty.Visibility = count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        ProjectListEmpty.Text = filter.Length == 0
+            ? "Abra uma pasta para começar."
+            : "Nenhum projeto encontrado.";
+    }
+
+    private static string ProjectName(string path)
+    {
+        string name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return string.IsNullOrEmpty(name) ? path : name;
     }
 
     private void OnNewTerminal(object sender, RoutedEventArgs e)
     {
         var (x, y) = NextSpawnPoint();
-        Materialize(new TerminalNode
-        {
-            Title = LabelFor(_shellKind),
-            X = x, Y = y, Width = 720, Height = 420,
-            CommandLine = CommandLineFor(_shellKind),
-            WorkingDirectory = _workingDirectory
-        });
+        CreateTerminal(x, y);
     }
 
     private void OnNewNote(object sender, RoutedEventArgs e)
     {
         var (x, y) = NextSpawnPoint();
-        Materialize(new NoteNode { Title = "nota", X = x, Y = y, Width = 340, Height = 240 });
+        CreateNote(x, y);
+    }
+
+    private void CreateTerminal(
+        double x,
+        double y,
+        double width = 720,
+        double height = 420,
+        string? title = null)
+    {
+        Materialize(new TerminalNode
+        {
+            Title = title ?? LabelFor(_shellKind),
+            X = x, Y = y, Width = width, Height = height,
+            CommandLine = CommandLineFor(_shellKind),
+            WorkingDirectory = _workingDirectory
+        });
+    }
+
+    private void CreateNote(double x, double y, double width = 340, double height = 240)
+    {
+        if (!Directory.Exists(_workingDirectory))
+        {
+            ShowRecoveryNotice("Abra um projeto antes de criar uma nota.");
+            return;
+        }
+
+        var model = new NoteNode
+        {
+            Title = "nota",
+            X = x, Y = y, Width = width, Height = height,
+            WorkingDirectory = _workingDirectory,
+            ViewMode = NoteViewMode.Raw
+        };
+        try
+        {
+            string folder = NoteFolder(model)!;
+            model.FileName = _noteFiles.CreateUniqueName("nota", folder);
+            _noteFiles.Write(model.FileName, "# Nota\n\nTexto em markdown.", folder);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            ShowRecoveryNotice($"Não foi possível criar a nota: {e.Message}");
+            return;
+        }
+        Materialize(model);
+        RefreshFileTree();
     }
 
     /// <summary>Builds the view for a model. The one place that knows model kind maps to view kind.</summary>
-    private void Materialize(NodeBase model)
+    private void Materialize(NodeBase model, string? initialInput = null)
     {
         switch (model)
         {
@@ -175,16 +403,24 @@ public sealed partial class MainWindow
             {
                 var view = new TerminalNodeView
                 {
+                    Title = terminalModel.Title,
                     CommandLine = terminalModel.CommandLine,
-                    StartDirectory = string.IsNullOrEmpty(terminalModel.WorkingDirectory) ? null : terminalModel.WorkingDirectory
+                    StartDirectory = string.IsNullOrEmpty(terminalModel.WorkingDirectory) ? null : terminalModel.WorkingDirectory,
+                    ExtraEnvironment = NodeEnvironment(terminalModel.Id),
+                    InitialInput = initialInput
                 };
+                view.ApplySettings(_settings.TerminalFontFamily, _settings.TerminalFontSize);
+                view.ApplyAccent(terminalModel.AccentColor);
+                view.Starting += () => PrimeAgent(terminalModel);
                 view.CloseRequested += RemoveNode;
+                _terminalViews[terminalModel.Id] = view;
                 AddNode(view, view, model);
                 break;
             }
-            case NoteNode:
+            case NoteNode noteModel:
             {
-                var view = new NoteNodeView { Markdown = "# Nota\n\nTexto em markdown." };
+                var view = new NoteNodeView();
+                BindNote(view, noteModel);
                 view.CloseRequested += RemoveNode;
                 AddNode(view, view, model);
                 break;

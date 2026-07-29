@@ -11,4 +11,8 @@ public sealed class Connection
     public Guid SourceId { get; set; }
     public Guid TargetId { get; set; }
     public bool Bidirectional { get; set; }
+    public double SourceAnchorX { get; set; } = 1;
+    public double SourceAnchorY { get; set; } = .5;
+    public double TargetAnchorX { get; set; }
+    public double TargetAnchorY { get; set; } = .5;
 }

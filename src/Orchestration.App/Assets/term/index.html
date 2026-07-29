@@ -4,10 +4,10 @@
   <meta charset="utf-8" />
   <link rel="stylesheet" href="xterm.css" />
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: #0c0c0c; overflow: hidden; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #0d0a13; overflow: hidden; }
     #term { height: 100%; width: 100%; }
     .xterm-viewport::-webkit-scrollbar { width: 10px; }
-    .xterm-viewport::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 5px; }
+    .xterm-viewport::-webkit-scrollbar-thumb { background: #362d59; border-radius: 5px; }
   </style>
 </head>
 <body>
@@ -23,7 +23,29 @@
       cursorBlink: true,
       allowProposedApi: true,
       scrollback: 5000,
-      theme: { background: '#0c0c0c', foreground: '#cccccc' }
+      theme: {
+        background: '#0d0a13',
+        foreground: '#f5f3f7',
+        cursor: '#c2ef4e',
+        cursorAccent: '#0d0a13',
+        selectionBackground: '#79628c88',
+        black: '#0d0a13',
+        red: '#ff5c5c',
+        green: '#c2ef4e',
+        yellow: '#f3ce6b',
+        blue: '#8aa8ff',
+        magenta: '#9e7bb8',
+        cyan: '#73d5d0',
+        white: '#c9c4d1',
+        brightBlack: '#756d85',
+        brightRed: '#ff7a7a',
+        brightGreen: '#d4ff69',
+        brightYellow: '#ffe08a',
+        brightBlue: '#a9bdff',
+        brightMagenta: '#b99bd0',
+        brightCyan: '#99ebe6',
+        brightWhite: '#ffffff'
+      }
     });
     const fit = new FitAddon.FitAddon();
     term.loadAddon(fit);
@@ -56,6 +78,7 @@
         term.write(bytesFromBase64(m.d));
       } else if (m.t === 'font') {
         term.options.fontSize = m.size;
+        if (m.family) term.options.fontFamily = m.family;
         reportSize();
       } else if (m.t === 'fit') {
         reportSize();
