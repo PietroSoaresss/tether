@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
+using Orchestration.Core.Models;
 using Orchestration.Core.Terminal;
 
 namespace Orchestration.App.Views;
@@ -27,10 +28,24 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     private double _baseFontSize = 14;
     private double _lastZoom = 1;
     private string _fontFamily = "Cascadia Mono, Consolas, monospace";
+    private string _kind = AgentKind.PowerShell.Id;
     private string _title = "terminal";
+    private bool _collapsed;
     private short _cols = 80, _rows = 24;
 
     public string CommandLine { get; set; } = "powershell.exe -NoLogo";
+
+    /// <summary>Drives the badge and the glyph. Falls back to the command line for older nodes.</summary>
+    public string Kind
+    {
+        get => _kind;
+        set
+        {
+            _kind = value;
+            if (KindText is not null) ApplyKind();
+        }
+    }
+
     public string Title
     {
         get => _title;
@@ -66,10 +81,7 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     {
         Loaded -= OnLoaded;
         TitleText.Text = Title;
-        string command = CommandLine.ToLowerInvariant();
-        KindText.Text = command.Contains("claude") ? "CLAUDE"
-            : command.Contains("codex") ? "CODEX"
-            : "TERMINAL";
+        ApplyKind();
 
         string directory = StartDirectory
             ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -234,6 +246,28 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
                 size = Math.Clamp(_baseFontSize * zoom, 12, 48),
                 family = _fontFamily
             }));
+    }
+
+    private void ApplyKind()
+    {
+        var kind = AgentKind.All.FirstOrDefault(k => k.Id == _kind) ?? AgentKind.FromCommandLine(CommandLine);
+        KindText.Text = kind.Badge;
+        KindIcon.Glyph = kind.Glyph;
+    }
+
+    public void SetCollapsed(bool collapsed)
+    {
+        if (_collapsed == collapsed) return;
+        _collapsed = collapsed;
+
+        // The header grows to fill the node instead of a separate card, so it stays the drag handle
+        // the canvas registered at creation time.
+        HeaderRow.Height = collapsed ? new GridLength(1, GridUnitType.Star) : new GridLength(44);
+        ContentRow.Height = collapsed ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        HeaderActions.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+        ProjectText.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+        // A zero-height WebView2 still composites; hiding it is what actually buys the frame time.
+        Web.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
     }
 
     public void ApplySettings(string family, double size)

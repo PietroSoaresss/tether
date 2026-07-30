@@ -123,39 +123,38 @@ public sealed partial class MainWindow
         UpdateCanvasToolContext();
     }
 
-    private string _shellKind = "powershell";
+    private string _shellKind = AgentKind.PowerShell.Id;
     private string _workingDirectory = "";
 
     /// <summary>
-    /// Launched through the shell rather than directly, because CreateProcess with a null
-    /// application name only finds .exe. On this machine `claude` happens to be claude.exe, but
-    /// `codex` is codex.ps1 — a script CreateProcess cannot run at all, and npm .cmd shims are
-    /// just as common. The shell resolves all three, and -NoExit keeps the prompt open so a
-    /// missing CLI reports itself inside the terminal instead of vanishing.
+    /// Builds the agent menu from the one table that knows the kinds, so adding an agent does not
+    /// mean remembering to edit XAML too.
     /// </summary>
-    private static string CommandLineFor(string kind) => kind switch
+    private void BuildTerminalMenu()
     {
-        "claude" => "powershell.exe -NoLogo -NoExit -Command claude",
-        "codex" => "powershell.exe -NoLogo -NoExit -Command codex",
-        _ => "powershell.exe -NoLogo"
-    };
+        var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
+        foreach (var kind in AgentKind.All)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = kind.Label,
+                Tag = kind.Id,
+                Icon = new FontIcon { Glyph = kind.Glyph }
+            };
+            item.Click += OnPickShell;
+            flyout.Items.Add(item);
+        }
+        NewTerminalButton.Flyout = flyout;
+    }
 
-    private static string LabelFor(string kind) => kind switch
-    {
-        "claude" => "Novo Claude",
-        "codex" => "Novo Codex",
-        _ => "Novo terminal"
-    };
-
-    /// <summary>SplitButton.Click is a TypedEventHandler, not the RoutedEventHandler the rest use.</summary>
-    private void OnNewTerminalClicked(SplitButton sender, SplitButtonClickEventArgs e) =>
-        OnNewTerminal(sender, new RoutedEventArgs());
-
+    /// <summary>
+    /// Every click opens the menu. It used to create straight away using whichever kind was picked
+    /// last, so pressing "Terminal" could silently launch a Claude.
+    /// </summary>
     private void OnPickShell(object sender, RoutedEventArgs e)
     {
         _shellKind = (string)((FrameworkElement)sender).Tag;
-        NewTerminalLabel.Text = LabelFor(_shellKind);
-        OnNewTerminal(sender, e);
+        ArmPlacement("place-terminal");
     }
 
     private async void OnOpenProject(object sender, RoutedEventArgs e)
@@ -336,16 +335,18 @@ public sealed partial class MainWindow
         return string.IsNullOrEmpty(name) ? path : name;
     }
 
-    private void OnNewTerminal(object sender, RoutedEventArgs e)
-    {
-        var (x, y) = NextSpawnPoint();
-        CreateTerminal(x, y);
-    }
-
+    /// <summary>
+    /// Checked before arming rather than after the drag: refusing at the end would make the user
+    /// draw a rectangle only to be told it was never going to work.
+    /// </summary>
     private void OnNewNote(object sender, RoutedEventArgs e)
     {
-        var (x, y) = NextSpawnPoint();
-        CreateNote(x, y);
+        if (!Directory.Exists(_workingDirectory))
+        {
+            ShowRecoveryNotice("Abra um projeto antes de criar uma nota.");
+            return;
+        }
+        ArmPlacement("place-note");
     }
 
     private void CreateTerminal(
@@ -355,11 +356,13 @@ public sealed partial class MainWindow
         double height = 420,
         string? title = null)
     {
+        var kind = AgentKind.Find(_shellKind);
         Materialize(new TerminalNode
         {
-            Title = title ?? LabelFor(_shellKind),
+            Title = title ?? kind.Label,
             X = x, Y = y, Width = width, Height = height,
-            CommandLine = CommandLineFor(_shellKind),
+            Kind = kind.Id,
+            CommandLine = kind.CommandLine,
             WorkingDirectory = _workingDirectory
         });
     }
@@ -404,6 +407,7 @@ public sealed partial class MainWindow
                 var view = new TerminalNodeView
                 {
                     Title = terminalModel.Title,
+                    Kind = terminalModel.Kind,
                     CommandLine = terminalModel.CommandLine,
                     StartDirectory = string.IsNullOrEmpty(terminalModel.WorkingDirectory) ? null : terminalModel.WorkingDirectory,
                     ExtraEnvironment = NodeEnvironment(terminalModel.Id),

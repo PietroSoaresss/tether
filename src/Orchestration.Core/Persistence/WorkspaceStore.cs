@@ -69,7 +69,15 @@ public sealed class WorkspaceStore
             item.Color ??= "#F5F3F7";
         }
         foreach (var terminal in workspace.Nodes.OfType<TerminalNode>())
+        {
             terminal.AccentColor ??= "";
+            terminal.CommandLine ??= AgentKind.PowerShell.CommandLine;
+            // Written before Kind existed, or by a newer build that knows a kind this one does not:
+            // recover it from the command line rather than mislabelling every old terminal.
+            if (string.IsNullOrWhiteSpace(terminal.Kind) ||
+                !AgentKind.All.Any(kind => kind.Id == terminal.Kind))
+                terminal.Kind = AgentKind.FromCommandLine(terminal.CommandLine).Id;
+        }
 
         // A zero, negative or non-finite zoom is not "too small", it is absent: snapping it to the
         // minimum would drop the user into a canvas they never zoomed out of.

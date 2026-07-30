@@ -10,6 +10,7 @@ namespace Orchestration.App.Views;
 public sealed partial class NoteNodeView : UserControl, INodeView
 {
     private double _baseFontSize = 13;
+    private bool _collapsed;
     private bool _selected;
     private bool _setting;
     private NoteViewMode _viewMode = NoteViewMode.Preview;
@@ -73,6 +74,17 @@ public sealed partial class NoteNodeView : UserControl, INodeView
         double size = Math.Clamp(_baseFontSize * zoom, 12, 48);
         Editor.FontSize = size;
         Preview.FontSize = size;
+    }
+
+    public void SetCollapsed(bool collapsed)
+    {
+        if (_collapsed == collapsed) return;
+        _collapsed = collapsed;
+
+        // Header grows to fill the node so it stays the drag handle the canvas already hooked.
+        HeaderRow.Height = collapsed ? new GridLength(1, GridUnitType.Star) : new GridLength(44);
+        ContentRow.Height = collapsed ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        HeaderActions.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void OnTextChanged(object sender, TextChangedEventArgs e)

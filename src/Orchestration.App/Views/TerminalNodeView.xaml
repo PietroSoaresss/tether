@@ -15,8 +15,8 @@
                 CornerRadius="12">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="44" />
-                    <RowDefinition Height="*" />
+                    <RowDefinition x:Name="HeaderRow" Height="44" />
+                    <RowDefinition x:Name="ContentRow" Height="*" />
                 </Grid.RowDefinitions>
 
                 <Grid x:Name="HeaderBar"
@@ -24,6 +24,7 @@
                       Padding="12,0"
                       ColumnSpacing="9">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -35,7 +36,13 @@
                              Height="8"
                              Fill="{StaticResource TetherAccentVioletBrush}"
                              VerticalAlignment="Center" />
-                    <Border Grid.Column="1"
+                    <FontIcon x:Name="KindIcon"
+                              Grid.Column="1"
+                              Glyph="&#xE756;"
+                              FontSize="13"
+                              Foreground="{ThemeResource TetherTextSecondaryBrush}"
+                              VerticalAlignment="Center" />
+                    <Border Grid.Column="2"
                             Padding="6,2"
                             CornerRadius="4"
                             Background="{StaticResource TetherBadgeBrush}"
@@ -48,7 +55,7 @@
                                    FontWeight="Bold"
                                    CharacterSpacing="70" />
                     </Border>
-                    <StackPanel Grid.Column="2"
+                    <StackPanel Grid.Column="3"
                                 VerticalAlignment="Center"
                                 Spacing="-1">
                         <TextBlock x:Name="TitleText"
@@ -65,7 +72,8 @@
                                    FontSize="10" />
                     </StackPanel>
 
-                    <StackPanel Grid.Column="3"
+                    <StackPanel x:Name="HeaderActions"
+                                Grid.Column="4"
                                 Orientation="Horizontal"
                                 Spacing="2">
                         <Button x:Name="RestartButton"

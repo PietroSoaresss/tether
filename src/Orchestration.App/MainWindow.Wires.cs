@@ -166,7 +166,7 @@ public sealed partial class MainWindow
                 path.PointerEntered += (_, _) =>
                 {
                     path.Stroke = new SolidColorBrush(WireLime);
-                    path.StrokeThickness = 5;
+                    path.StrokeThickness = WireThickness(true);
                 };
                 path.PointerExited += (_, _) => RenderWires();
                 path.RightTapped += (_, e) => ShowWireMenu(connection, path, e.GetPosition(path));
@@ -176,7 +176,7 @@ public sealed partial class MainWindow
 
             bool selected = _selectedWire == connection.Id;
             path.Stroke = new SolidColorBrush(selected ? WireLime : WireViolet);
-            path.StrokeThickness = selected ? 5 : 4;
+            path.StrokeThickness = WireThickness(selected);
             SetCurve(
                 path,
                 AnchorPoint(source, connection.SourceAnchorX, connection.SourceAnchorY),
@@ -320,6 +320,12 @@ public sealed partial class MainWindow
     private Point AnchorPoint(CanvasNode node, double x, double y) => new(
         node.X * _zoom + _offsetX + Math.Clamp(x, 0, 1) * node.Width * _zoom,
         node.Y * _zoom + _offsetY + Math.Clamp(y, 0, 1) * node.Height * _zoom);
+
+    /// <summary>
+    /// Cables scale with the canvas, or zooming out leaves 4 px ribbons dominating nodes that have
+    /// shrunk past them. The floor keeps a wire clickable at the far end of the range.
+    /// </summary>
+    private double WireThickness(bool emphasised) => Math.Max(1.5, (emphasised ? 5 : 4) * _zoom);
 
     private static XamlPath NewPath(Windows.UI.Color color) => new()
     {

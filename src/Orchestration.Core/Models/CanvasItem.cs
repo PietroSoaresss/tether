@@ -1,6 +1,12 @@
 namespace Orchestration.Core.Models;
 
-public enum CanvasItemKind { Stroke, Text }
+/// <summary>
+/// Serialized by name, so new members are backward compatible and order is free to change.
+/// Arrow, Rectangle, Ellipse and Diamond all store their geometry as the first and last
+/// <see cref="CanvasItem.Points"/> entry — two corners, or two ends — so none of them needed a
+/// new field on the model.
+/// </summary>
+public enum CanvasItemKind { Stroke, Text, Arrow, Rectangle, Ellipse, Diamond }
 
 public sealed class CanvasPoint
 {

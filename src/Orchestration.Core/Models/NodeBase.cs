@@ -17,6 +17,12 @@ public abstract class NodeBase
 
 public sealed class TerminalNode : NodeBase
 {
+    /// <summary>
+    /// Which <see cref="AgentKind"/> this is. Files written before this field existed come back with
+    /// the default and get backfilled from <see cref="CommandLine"/> once, on load.
+    /// </summary>
+    public string Kind { get; set; } = AgentKind.PowerShell.Id;
+
     public string CommandLine { get; set; } = "powershell.exe -NoLogo";
 
     /// <summary>Agents, notes and `tether ask` all key off this, so it is per node rather than global.</summary>

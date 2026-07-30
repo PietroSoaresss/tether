@@ -8,8 +8,12 @@ public sealed class Camera
     /// hand edit or a half-written file — divides by zero in every world-to-screen conversion, and
     /// the view cannot be the one to catch it: Core has non-UI readers too.
     /// </summary>
-    public const double MinZoom = 0.3;
-    public const double MaxZoom = 2.5;
+    /// <summary>
+    /// The single source of truth for the zoom range: the view used to keep its own narrower pair,
+    /// so a workspace could persist a zoom the UI could neither reach nor reproduce.
+    /// </summary>
+    public const double MinZoom = 0.1;
+    public const double MaxZoom = 4.0;
     public const double DefaultZoom = 1.0;
 
     public double OffsetX { get; set; }

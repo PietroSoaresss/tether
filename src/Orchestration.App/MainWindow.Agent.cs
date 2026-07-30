@@ -65,8 +65,9 @@ public sealed partial class MainWindow
         string kind = request.Args.GetValueOrDefault("kind", "").ToLowerInvariant();
         string prompt = request.Args.GetValueOrDefault("prompt", "");
         string requestedTitle = request.Args.GetValueOrDefault("title", "").Trim();
-        if (kind is not ("claude" or "codex") || string.IsNullOrWhiteSpace(prompt))
+        if (!AgentKind.CanSpawn(kind) || string.IsNullOrWhiteSpace(prompt))
             return TetherResponse.Failure("invalid kind or prompt");
+        var agent = AgentKind.Find(kind);
         if (requestedTitle.Length > 80)
             return TetherResponse.Failure("title too long");
         if (requestedTitle.Length > 0 && _workspace.Nodes.Any(node =>
@@ -77,12 +78,13 @@ public sealed partial class MainWindow
         {
             Title = requestedTitle.Length > 0
                 ? requestedTitle
-                : $"{(kind == "claude" ? "Claude" : "Codex")} {Guid.NewGuid():N}"[..12],
+                : $"{agent.Label} {Guid.NewGuid():N}"[..12],
             X = caller.X + caller.Width + 80,
             Y = caller.Y + _workspace.Connections.Count(connection => connection.SourceId == caller.Id) * 48,
             Width = 720,
             Height = 420,
-            CommandLine = CommandLineFor(kind),
+            Kind = agent.Id,
+            CommandLine = agent.CommandLine,
             WorkingDirectory = string.IsNullOrWhiteSpace(caller.WorkingDirectory)
                 ? _workingDirectory
                 : caller.WorkingDirectory

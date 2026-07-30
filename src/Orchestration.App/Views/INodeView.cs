@@ -10,4 +10,11 @@ public interface INodeView
     UIElement ResizeGrip { get; }
     void ApplyZoom(double zoom);
     void SetSelected(bool selected);
+
+    /// <summary>
+    /// Far enough out, the node box is smaller than its own header and the 12 px font floor stops
+    /// meaning anything. Collapsed nodes show identity only. This is presentation: a collapsed
+    /// terminal keeps its session.
+    /// </summary>
+    void SetCollapsed(bool collapsed);
 }

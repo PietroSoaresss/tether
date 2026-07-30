@@ -13,7 +13,15 @@ namespace Orchestration.App;
 /// <summary>Camera: pan, zoom and where each node lands on screen.</summary>
 public sealed partial class MainWindow
 {
-    private const double MinZoom = 0.5, MaxZoom = 2.5;
+    // Camera owns the range; keeping a second pair here is what let the view and the store disagree.
+    private const double MinZoom = Camera.MinZoom, MaxZoom = Camera.MaxZoom;
+
+    /// <summary>
+    /// Below this the node box is too small for its own 12 px font floor, so the terminal would ask
+    /// xterm to fit a handful of columns and resize the pseudoconsole to match. Nodes swap to a
+    /// cheap card instead: the session keeps running, only the presentation changes.
+    /// </summary>
+    private const double CollapseZoom = 0.4;
 
     private double _zoom = 1.0, _offsetX, _offsetY;
     private Point _panStart;
@@ -40,6 +48,7 @@ public sealed partial class MainWindow
         {
             PlaceNode(node);
             node.Node.ApplyZoom(_zoom);
+            node.Node.SetCollapsed(_zoom < CollapseZoom);
         }
         RenderAnnotations();
         DrawGrid();
@@ -130,12 +139,58 @@ public sealed partial class MainWindow
         e.Handled = true;
     }
 
+    /// <summary>
+    /// Frames everything on the canvas. The button has always been called "ajustar zoom" but only
+    /// reset to 100% at the origin, which on a wide canvas strands every node the user placed far
+    /// out and reads as the canvas having lost them.
+    /// </summary>
     private void OnResetView(object sender, RoutedEventArgs e)
     {
-        _zoom = 1.0;
-        _offsetX = _offsetY = 0;
+        double width = Viewport.ActualWidth, height = Viewport.ActualHeight;
+        if (!TryContentBounds(out Rect content) || width <= 0 || height <= 0)
+        {
+            _zoom = Camera.DefaultZoom;
+            _offsetX = _offsetY = 0;
+        }
+        else
+        {
+            const double padding = 60;
+            double scale = Math.Min(
+                (width - padding * 2) / Math.Max(content.Width, 1),
+                (height - padding * 2) / Math.Max(content.Height, 1));
+            _zoom = Math.Clamp(scale, MinZoom, MaxZoom);
+            _offsetX = width / 2 - (content.X + content.Width / 2) * _zoom;
+            _offsetY = height / 2 - (content.Y + content.Height / 2) * _zoom;
+        }
         ApplyLayout();
         SaveCamera();
+    }
+
+    /// <summary>World-space bounding box of every node and annotation, or false when empty.</summary>
+    private bool TryContentBounds(out Rect bounds)
+    {
+        double left = double.MaxValue, top = double.MaxValue;
+        double right = double.MinValue, bottom = double.MinValue;
+
+        void Grow(double x, double y, double w, double h)
+        {
+            left = Math.Min(left, x);
+            top = Math.Min(top, y);
+            right = Math.Max(right, x + w);
+            bottom = Math.Max(bottom, y + h);
+        }
+
+        foreach (var node in _nodes) Grow(node.X, node.Y, node.Width, node.Height);
+        foreach (var item in _workspace.CanvasItems)
+        {
+            if (item.Points.Count > 0)
+                foreach (var point in item.Points) Grow(point.X, point.Y, 0, 0);
+            else
+                Grow(item.X, item.Y, 0, 0);
+        }
+
+        bounds = new Rect(left, top, Math.Max(right - left, 1), Math.Max(bottom - top, 1));
+        return left != double.MaxValue;
     }
 
     private void SaveCamera()
@@ -153,7 +208,15 @@ public sealed partial class MainWindow
         if (width <= 0 || height <= 0) return;
 
         GridLines.Children.Clear();
-        double spacing = 40 * _zoom;
+
+        // A fixed 40-unit cell becomes 4 px at the far end of the zoom range, which is thousands of
+        // Line objects rebuilt on every pan. Stepping the cell by 5 keeps the on-screen spacing in a
+        // readable band, so the line count stays in the dozens at any zoom.
+        double cell = 40;
+        while (cell * _zoom < 24) cell *= 5;
+        while (cell * _zoom > 160) cell /= 5;
+
+        double spacing = cell * _zoom;
         double startX = ((_offsetX % spacing) + spacing) % spacing;
         double startY = ((_offsetY % spacing) + spacing) % spacing;
         var minor = new SolidColorBrush(Windows.UI.Color.FromArgb(24, 121, 98, 140));
