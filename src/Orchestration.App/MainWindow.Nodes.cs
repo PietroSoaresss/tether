@@ -25,6 +25,7 @@ public sealed partial class MainWindow
     }
 
     private readonly List<CanvasNode> _nodes = new();
+    private readonly HashSet<CanvasNode> _selectedNodes = new();
     private double _spawnCursor;
     private CanvasNode? _selectedNode;
 
@@ -38,6 +39,7 @@ public sealed partial class MainWindow
         World.Children.Add(view);
         PlaceNode(entry);
         node.ApplyZoom(_zoom);
+        RenderWires();
         RegisterDrag(entry);
         RegisterGraphNode(entry);
         // AddNode serves both the toolbar and the load path; only the former is a user edit.
@@ -58,8 +60,14 @@ public sealed partial class MainWindow
         if (entry is null) return;
 
         if (ReferenceEquals(_wireSource, entry)) CancelWire();
-        if (ReferenceEquals(_selectedNode, entry)) SelectNode(null);
         _nodes.Remove(entry);
+        if (_selectedNodes.Remove(entry))
+        {
+            entry.Node.SetSelected(false);
+            if (ReferenceEquals(_selectedNode, entry))
+                _selectedNode = _nodes.LastOrDefault(_selectedNodes.Contains);
+            UpdateCanvasToolContext();
+        }
         _workspace.Nodes.Remove(entry.Model);
         _workspace.Connections.RemoveAll(c => c.SourceId == entry.Model.Id || c.TargetId == entry.Model.Id);
         _noteViews.Remove(entry.Model.Id);
@@ -77,7 +85,8 @@ public sealed partial class MainWindow
 
         handle.PointerPressed += (s, e) =>
         {
-            SelectNode(entry);
+            if (!e.GetCurrentPoint(Viewport).Properties.IsLeftButtonPressed) return;
+            if (!_selectedNodes.Contains(entry)) SelectNode(entry);
             _selectedWire = null;
             RenderWires();
             last = e.GetCurrentPoint(Viewport).Position;
@@ -89,10 +98,16 @@ public sealed partial class MainWindow
         {
             if (!dragging) return;
             var now = e.GetCurrentPoint(Viewport).Position;
-            entry.X += (now.X - last.X) / _zoom;
-            entry.Y += (now.Y - last.Y) / _zoom;
+            double dx = (now.X - last.X) / _zoom;
+            double dy = (now.Y - last.Y) / _zoom;
             last = now;
-            PlaceNode(entry);
+            foreach (CanvasNode selected in _selectedNodes)
+            {
+                selected.X += dx;
+                selected.Y += dy;
+                PlaceNode(selected);
+            }
+            RenderWires();
         };
 
         void EndDrag(object s, PointerRoutedEventArgs e)
@@ -114,12 +129,20 @@ public sealed partial class MainWindow
         };
     }
 
-    private void SelectNode(CanvasNode? entry)
+    private void SelectNode(CanvasNode? entry) =>
+        SelectNodes(entry is null ? [] : [entry]);
+
+    private void SelectNodes(IEnumerable<CanvasNode> entries)
     {
-        if (ReferenceEquals(_selectedNode, entry)) return;
-        _selectedNode?.Node.SetSelected(false);
-        _selectedNode = entry;
-        _selectedNode?.Node.SetSelected(true);
+        var selected = entries.ToHashSet();
+        foreach (CanvasNode node in _selectedNodes)
+            if (!selected.Contains(node)) node.Node.SetSelected(false);
+        foreach (CanvasNode node in selected)
+            if (!_selectedNodes.Contains(node)) node.Node.SetSelected(true);
+
+        _selectedNodes.Clear();
+        _selectedNodes.UnionWith(selected);
+        _selectedNode = _nodes.LastOrDefault(_selectedNodes.Contains);
         UpdateCanvasToolContext();
     }
 

@@ -115,6 +115,24 @@ public class WorkspaceJsonTests
     }
 
     [Fact]
+    public void Camera_FitsNodesInsideTheViewport()
+    {
+        NodeBase[] nodes =
+        [
+            new NoteNode { X = -100, Y = 50, Width = 200, Height = 100 },
+            new TerminalNode { X = 300, Y = 250, Width = 400, Height = 200 }
+        ];
+
+        Camera camera = Camera.Fit(nodes, 1000, 600, padding: 50);
+
+        Assert.Equal(1.125, camera.Zoom);
+        Assert.Equal(50, -100 * camera.Zoom + camera.OffsetX);
+        Assert.Equal(75, 50 * camera.Zoom + camera.OffsetY);
+        Assert.Equal(950, 700 * camera.Zoom + camera.OffsetX);
+        Assert.Equal(525, 450 * camera.Zoom + camera.OffsetY);
+    }
+
+    [Fact]
     public void AppSettings_RoundTripsWithDefaults()
     {
         var defaults = new AppSettings();

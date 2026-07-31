@@ -160,12 +160,15 @@ public sealed partial class MainWindow
             DeleteWire(wire);
             return;
         }
-        if (_selectedNode is not null)
+        if (_selectedNodes.Count > 0)
         {
-            var selected = _selectedNode;
+            CanvasNode[] selected = _selectedNodes.ToArray();
             SelectNode(null);
-            if (selected.Node is Views.TerminalNodeView terminal) terminal.DisposeSession();
-            RemoveNode(selected.View);
+            foreach (CanvasNode node in selected)
+            {
+                if (node.Node is Views.TerminalNodeView terminal) terminal.DisposeSession();
+                RemoveNode(node.View);
+            }
         }
     }
 

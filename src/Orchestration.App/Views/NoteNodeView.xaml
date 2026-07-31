@@ -14,12 +14,16 @@
                 CornerRadius="12">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="44" />
+                    <RowDefinition x:Name="HeaderRow" Height="44" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
                 <Grid x:Name="HeaderBar"
-                      Background="{ThemeResource TetherNodeHeaderBrush}"
+                      Background="{ThemeResource TetherNodeHeaderBrush}">
+                    <Grid x:Name="HeaderContent"
+                      Height="44"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Top"
                       Padding="12,0"
                       ColumnSpacing="9">
                     <Grid.ColumnDefinitions>
@@ -62,6 +66,7 @@
                             <FontIcon Glyph="&#xE74D;" FontSize="12" />
                         </Button>
                     </StackPanel>
+                    </Grid>
                 </Grid>
 
                 <Grid Grid.Row="1"

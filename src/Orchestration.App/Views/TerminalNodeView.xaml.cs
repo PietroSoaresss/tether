@@ -18,7 +18,10 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     private static CoreWebView2Environment? _sharedEnvironment;
     private static readonly SemaphoreSlim EnvironmentLock = new(1, 1);
 
+    private const double HeaderDesignHeight = 44;
+
     private readonly DispatcherQueue _dispatcher;
+    private readonly ScaleTransform _headerScale = new();
     private readonly List<byte> _pendingOutput = new();
     private bool _flushScheduled;
     private bool _pageReady;
@@ -59,7 +62,21 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     {
         InitializeComponent();
         _dispatcher = DispatcherQueue.GetForCurrentThread();
+        HeaderContent.RenderTransform = _headerScale;
+        SizeChanged += (_, _) => ScaleHeader();
         Loaded += OnLoaded;
+    }
+
+    /// <summary>
+    /// The header scales with the canvas like everything else: the row grows in screen pixels while
+    /// its content keeps its design size and is transformed to match. Laying the content out at the
+    /// zoomed size instead would reflow it — icons and text would drift out of proportion.
+    /// </summary>
+    private void ScaleHeader()
+    {
+        _headerScale.ScaleX = _headerScale.ScaleY = _lastZoom;
+        HeaderRow.Height = new GridLength(HeaderDesignHeight * _lastZoom);
+        HeaderContent.Width = ActualWidth > 0 ? ActualWidth / _lastZoom : double.NaN;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -222,16 +239,18 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
         StateDot.Fill = (Brush)Application.Current.Resources["TetherDangerBrush"];
     }
 
-    /// <summary>Zoom is applied as layout, never as a transform: the WebView2 surface is not scalable.</summary>
+    /// <summary>The WebView stays in layout; its page scales the complete terminal surface.</summary>
     public void ApplyZoom(double zoom)
     {
         _lastZoom = zoom;
+        ScaleHeader();
         if (Web.CoreWebView2 is null || !_pageReady) return;
         Web.CoreWebView2.PostWebMessageAsString(
             JsonSerializer.Serialize(new
             {
-                t = "font",
-                size = Math.Clamp(_baseFontSize * zoom, 12, 48),
+                t = "zoom",
+                scale = zoom,
+                size = _baseFontSize,
                 family = _fontFamily
             }));
     }

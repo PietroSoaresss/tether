@@ -29,6 +29,7 @@ public sealed partial class MainWindow
             : Visibility.Collapsed;
         surface.PointerPressed += (_, e) =>
         {
+            if (!e.GetCurrentPoint(Viewport).Properties.IsLeftButtonPressed) return;
             SelectNode(entry);
             _selectedWire = null;
             _wireSource = entry;
@@ -158,6 +159,7 @@ public sealed partial class MainWindow
                 path.Tag = connection.Id;
                 path.PointerPressed += (_, e) =>
                 {
+                    if (!e.GetCurrentPoint(Viewport).Properties.IsLeftButtonPressed) return;
                     SelectNode(null);
                     _selectedWire = (Guid)path.Tag;
                     RenderWires();
@@ -218,6 +220,7 @@ public sealed partial class MainWindow
         bool resizing = false;
         entry.Node.ResizeGrip.PointerPressed += (sender, e) =>
         {
+            if (!e.GetCurrentPoint(Viewport).Properties.IsLeftButtonPressed) return;
             SelectNode(entry);
             _selectedWire = null;
             RenderWires();
@@ -235,6 +238,7 @@ public sealed partial class MainWindow
             entry.Height = Math.Max(minHeight, entry.Height + (now.Y - last.Y) / _zoom);
             last = now;
             PlaceNode(entry);
+            RenderWires();
         };
         entry.Node.ResizeGrip.PointerReleased += (sender, e) =>
         {

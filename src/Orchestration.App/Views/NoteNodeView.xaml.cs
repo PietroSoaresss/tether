@@ -9,7 +9,11 @@ namespace Orchestration.App.Views;
 
 public sealed partial class NoteNodeView : UserControl, INodeView
 {
+    private const double HeaderDesignHeight = 44;
+
+    private readonly ScaleTransform _headerScale = new();
     private double _baseFontSize = 13;
+    private double _lastZoom = 1;
     private bool _selected;
     private bool _setting;
     private NoteViewMode _viewMode = NoteViewMode.Preview;
@@ -42,7 +46,24 @@ public sealed partial class NoteNodeView : UserControl, INodeView
         }
     }
 
-    public NoteNodeView() => InitializeComponent();
+    public NoteNodeView()
+    {
+        InitializeComponent();
+        HeaderContent.RenderTransform = _headerScale;
+        SizeChanged += (_, _) => ScaleHeader();
+    }
+
+    /// <summary>
+    /// The header scales with the canvas like everything else: the row grows in screen pixels while
+    /// its content keeps its design size and is transformed to match. Laying the content out at the
+    /// zoomed size instead would reflow it — icons and text would drift out of proportion.
+    /// </summary>
+    private void ScaleHeader()
+    {
+        _headerScale.ScaleX = _headerScale.ScaleY = _lastZoom;
+        HeaderRow.Height = new GridLength(HeaderDesignHeight * _lastZoom);
+        HeaderContent.Width = ActualWidth > 0 ? ActualWidth / _lastZoom : double.NaN;
+    }
 
     public NoteViewMode ViewMode
     {
@@ -70,9 +91,14 @@ public sealed partial class NoteNodeView : UserControl, INodeView
 
     public void ApplyZoom(double zoom)
     {
-        double size = Math.Clamp(_baseFontSize * zoom, 12, 48);
+        _lastZoom = zoom;
+        ScaleHeader();
+        double size = _baseFontSize * zoom;
         Editor.FontSize = size;
+        Editor.Padding = new Thickness(14 * zoom, 12 * zoom, 14 * zoom, 12 * zoom);
+        PreviewScroller.Padding = new Thickness(14 * zoom, 12 * zoom, 14 * zoom, 12 * zoom);
         Preview.FontSize = size;
+        if (ViewMode == NoteViewMode.Preview) RenderMarkdown();
     }
 
     private void OnTextChanged(object sender, TextChangedEventArgs e)

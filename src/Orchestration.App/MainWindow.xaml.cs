@@ -34,6 +34,10 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         Title = "Tether";
+        Viewport.AddHandler(
+            UIElement.PointerPressedEvent,
+            new Microsoft.UI.Xaml.Input.PointerEventHandler(OnCanvasPointerPressed),
+            true);
 
         _store = new WorkspaceStore(_paths);
         _noteFiles = new NoteFiles(_paths);

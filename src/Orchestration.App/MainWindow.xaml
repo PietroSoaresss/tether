@@ -184,9 +184,9 @@
                   Grid.Column="1"
                   Background="{ThemeResource TetherCanvasBrush}"
                   SizeChanged="OnViewportSizeChanged"
-                  PointerPressed="OnCanvasPointerPressed"
                   PointerMoved="OnCanvasPointerMoved"
                   PointerReleased="OnCanvasPointerReleased"
+                  DoubleTapped="OnCanvasDoubleTapped"
                   PointerWheelChanged="OnCanvasWheel">
                 <Canvas x:Name="CanvasBackground"
                         Background="{ThemeResource TetherCanvasBrush}" />
@@ -194,6 +194,14 @@
                 <Canvas x:Name="Annotations" />
                 <Canvas x:Name="Wires" />
                 <Canvas x:Name="World" />
+                <Canvas IsHitTestVisible="False">
+                    <Rectangle x:Name="SelectionMarquee"
+                               Visibility="Collapsed"
+                               Stroke="{StaticResource TetherAccentLimeBrush}"
+                               StrokeThickness="1"
+                               StrokeDashArray="4,3"
+                               Fill="#1AC2EF4E" />
+                </Canvas>
                 <StackPanel VerticalAlignment="Top"
                             HorizontalAlignment="Center"
                             Margin="0,12,0,0"

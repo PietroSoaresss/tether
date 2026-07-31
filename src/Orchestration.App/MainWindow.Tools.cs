@@ -108,22 +108,7 @@ public sealed partial class MainWindow
 
         if (_canvasTool == "text")
         {
-            var world = ScreenToWorld(screen);
-            var item = new CanvasItem
-            {
-                Kind = CanvasItemKind.Text,
-                X = world.X,
-                Y = world.Y,
-                Text = "Texto",
-                Color = _canvasColor,
-                Size = _textSize
-            };
-            _workspace.CanvasItems.Add(item);
-            var box = (TextBox)EnsureAnnotationView(item);
-            PositionAnnotation(item, box);
-            box.Focus(FocusState.Programmatic);
-            box.SelectAll();
-            _autosave.Touch();
+            AddCanvasText(screen);
             e.Handled = true;
             return true;
         }
@@ -147,6 +132,33 @@ public sealed partial class MainWindow
         }
 
         return _canvasTool == "erase";
+    }
+
+    private void OnCanvasDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (_canvasTool != "select" ||
+            !ReferenceEquals(e.OriginalSource, CanvasBackground)) return;
+        AddCanvasText(e.GetPosition(Viewport));
+        e.Handled = true;
+    }
+
+    private void AddCanvasText(Point screen)
+    {
+        var world = ScreenToWorld(screen);
+        var item = new CanvasItem
+        {
+            Kind = CanvasItemKind.Text,
+            X = world.X,
+            Y = world.Y,
+            Text = "Texto",
+            Color = _canvasColor,
+            Size = _textSize
+        };
+        _workspace.CanvasItems.Add(item);
+        var view = (Grid)EnsureAnnotationView(item);
+        PositionAnnotation(item, view);
+        EditCanvasText(view);
+        _autosave.Touch();
     }
 
     private bool TryMoveCanvasTool(PointerRoutedEventArgs e)
@@ -211,24 +223,47 @@ public sealed partial class MainWindow
         }
         else
         {
-            var box = new TextBox
+            var label = new TextBlock
             {
                 Text = item.Text,
-                MinWidth = 100,
                 MaxWidth = 480,
-                Padding = new Thickness(2),
+                TextWrapping = TextWrapping.Wrap
+            };
+            var editor = new TextBox
+            {
+                Text = item.Text,
+                MinWidth = 80,
+                MaxWidth = 480,
+                Padding = new Thickness(0),
                 AcceptsReturn = true,
                 TextWrapping = TextWrapping.Wrap,
                 Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                BorderThickness = new Thickness(0)
+                BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                BorderThickness = new Thickness(0),
+                Visibility = Visibility.Collapsed
             };
-            box.TextChanged += (_, _) =>
+            var text = new Grid();
+            text.Children.Add(label);
+            text.Children.Add(editor);
+            label.DoubleTapped += (_, e) =>
             {
-                item.Text = box.Text;
+                if (_canvasTool == "erase") return;
+                EditCanvasText(text);
+                e.Handled = true;
+            };
+            editor.TextChanged += (_, _) =>
+            {
+                item.Text = editor.Text;
+                label.Text = editor.Text;
                 _autosave.Touch();
             };
-            box.PointerPressed += (_, e) => TryEraseAnnotation(item, e);
-            view = box;
+            editor.LostFocus += (_, _) =>
+            {
+                editor.Visibility = Visibility.Collapsed;
+                label.Visibility = Visibility.Visible;
+            };
+            text.PointerPressed += (_, e) => TryEraseAnnotation(item, e);
+            view = text;
         }
 
         _annotationViews[item.Id] = view;
@@ -249,17 +284,31 @@ public sealed partial class MainWindow
             return;
         }
 
-        var box = (TextBox)view;
-        if (box.Text != item.Text) box.Text = item.Text;
-        box.Foreground = color;
-        box.FontSize = Math.Clamp(item.Size * _zoom, 10, 72);
-        Canvas.SetLeft(box, item.X * _zoom + _offsetX);
-        Canvas.SetTop(box, item.Y * _zoom + _offsetY);
+        var text = (Grid)view;
+        var label = (TextBlock)text.Children[0];
+        var editor = (TextBox)text.Children[1];
+        if (label.Text != item.Text) label.Text = item.Text;
+        if (editor.Text != item.Text) editor.Text = item.Text;
+        label.Foreground = editor.Foreground = color;
+        label.FontSize = editor.FontSize = Math.Clamp(item.Size * _zoom, 10, 72);
+        Canvas.SetLeft(text, item.X * _zoom + _offsetX);
+        Canvas.SetTop(text, item.Y * _zoom + _offsetY);
+    }
+
+    private static void EditCanvasText(Grid text)
+    {
+        var label = (TextBlock)text.Children[0];
+        var editor = (TextBox)text.Children[1];
+        label.Visibility = Visibility.Collapsed;
+        editor.Visibility = Visibility.Visible;
+        editor.Focus(FocusState.Programmatic);
+        editor.SelectAll();
     }
 
     private void TryEraseAnnotation(CanvasItem item, PointerRoutedEventArgs e)
     {
-        if (_canvasTool != "erase") return;
+        if (_canvasTool != "erase" ||
+            !e.GetCurrentPoint(Viewport).Properties.IsLeftButtonPressed) return;
         _workspace.CanvasItems.Remove(item);
         if (_annotationViews.Remove(item.Id, out var view))
             Annotations.Children.Remove(view);

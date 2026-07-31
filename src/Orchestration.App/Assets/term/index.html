@@ -5,13 +5,14 @@
   <link rel="stylesheet" href="xterm.css" />
   <style>
     html, body { margin: 0; padding: 0; height: 100%; background: #0d0a13; overflow: hidden; }
+    #terminal-scale { height: 100%; width: 100%; transform-origin: top left; }
     #term { height: 100%; width: 100%; }
     .xterm-viewport::-webkit-scrollbar { width: 10px; }
     .xterm-viewport::-webkit-scrollbar-thumb { background: #362d59; border-radius: 5px; }
   </style>
 </head>
 <body>
-  <div id="term"></div>
+  <div id="terminal-scale"><div id="term"></div></div>
   <script src="xterm.js"></script>
   <script src="addon-fit.js"></script>
   <script>
@@ -76,7 +77,12 @@
         // Raw VT bytes: xterm keeps its own decoder state across writes, so split
         // escape sequences and UTF-8 code points survive chunk boundaries.
         term.write(bytesFromBase64(m.d));
-      } else if (m.t === 'font') {
+      } else if (m.t === 'zoom') {
+        const scale = Math.max(0.01, m.scale || 1);
+        const surface = document.getElementById('terminal-scale');
+        surface.style.width = `${100 / scale}%`;
+        surface.style.height = `${100 / scale}%`;
+        surface.style.transform = `scale(${scale})`;
         term.options.fontSize = m.size;
         if (m.family) term.options.fontFamily = m.family;
         reportSize();

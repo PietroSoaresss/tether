@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using Orchestration.Core.Models;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI.Core;
@@ -13,11 +14,11 @@ namespace Orchestration.App;
 /// <summary>Camera: pan, zoom and where each node lands on screen.</summary>
 public sealed partial class MainWindow
 {
-    private const double MinZoom = 0.5, MaxZoom = 2.5;
-
     private double _zoom = 1.0, _offsetX, _offsetY;
     private Point _panStart;
     private bool _panning;
+    private Point _selectionStart;
+    private bool _selecting;
 
     // ---- canvas transform -------------------------------------------------
 
@@ -31,7 +32,6 @@ public sealed partial class MainWindow
         Canvas.SetTop(node.View, node.Y * _zoom + _offsetY);
         node.View.Width = node.Width * _zoom;
         node.View.Height = node.Height * _zoom;
-        RenderWires();
     }
 
     private void ApplyLayout()
@@ -41,6 +41,7 @@ public sealed partial class MainWindow
             PlaceNode(node);
             node.Node.ApplyZoom(_zoom);
         }
+        RenderWires();
         RenderAnnotations();
         DrawGrid();
         UpdateZoomLabel();
@@ -58,36 +59,93 @@ public sealed partial class MainWindow
 
     private void OnCanvasPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        // Only the empty background pans; pointer events over a node belong to the node.
+        var point = e.GetCurrentPoint(Viewport);
+        if (point.Properties.IsMiddleButtonPressed)
+        {
+            _panStart = point.Position;
+            _panning = Viewport.CapturePointer(e.Pointer);
+            e.Handled = _panning;
+            return;
+        }
+
+        // Only the empty background starts tools or a marquee.
         if (!ReferenceEquals(e.OriginalSource, CanvasBackground)) return;
+        if (!point.Properties.IsLeftButtonPressed) return;
         if (TryStartCanvasTool(e)) return;
         SelectNode(null);
         _selectedWire = null;
         RenderWires();
-        _panStart = e.GetCurrentPoint(Viewport).Position;
-        _panning = Viewport.CapturePointer(e.Pointer);
+        _selectionStart = point.Position;
+        _selecting = Viewport.CapturePointer(e.Pointer);
+        SelectionMarquee.Visibility = _selecting ? Visibility.Visible : Visibility.Collapsed;
+        UpdateSelection(point.Position);
+        e.Handled = _selecting;
     }
 
     private void OnCanvasPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (TryMoveCanvasTool(e)) return;
-        if (!_panning) return;
         var now = e.GetCurrentPoint(Viewport).Position;
-        _offsetX += now.X - _panStart.X;
-        _offsetY += now.Y - _panStart.Y;
-        _panStart = now;
-        foreach (var node in _nodes) PlaceNode(node);
-        RenderAnnotations();
-        DrawGrid();
+        if (_panning)
+        {
+            _offsetX += now.X - _panStart.X;
+            _offsetY += now.Y - _panStart.Y;
+            _panStart = now;
+            foreach (var node in _nodes) PlaceNode(node);
+            RenderWires();
+            RenderAnnotations();
+            DrawGrid();
+            e.Handled = true;
+        }
+        else if (_selecting)
+        {
+            UpdateSelection(now);
+            e.Handled = true;
+        }
     }
 
     private void OnCanvasPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        if (TryEndCanvasTool(e)) return;
-        if (!_panning) return;
-        _panning = false;
-        Viewport.ReleasePointerCapture(e.Pointer);
-        SaveCamera();
+        if (_panning)
+        {
+            _panning = false;
+            Viewport.ReleasePointerCapture(e.Pointer);
+            SaveCamera();
+            e.Handled = true;
+        }
+        else if (_selecting)
+        {
+            _selecting = false;
+            SelectionMarquee.Visibility = Visibility.Collapsed;
+            Viewport.ReleasePointerCapture(e.Pointer);
+            e.Handled = true;
+        }
+        else
+        {
+            TryEndCanvasTool(e);
+        }
+    }
+
+    private void UpdateSelection(Point end)
+    {
+        double left = Math.Min(_selectionStart.X, end.X);
+        double top = Math.Min(_selectionStart.Y, end.Y);
+        double width = Math.Abs(end.X - _selectionStart.X);
+        double height = Math.Abs(end.Y - _selectionStart.Y);
+        Canvas.SetLeft(SelectionMarquee, left);
+        Canvas.SetTop(SelectionMarquee, top);
+        SelectionMarquee.Width = width;
+        SelectionMarquee.Height = height;
+
+        SelectNodes(_nodes.Where(node =>
+        {
+            double nodeLeft = Canvas.GetLeft(node.View);
+            double nodeTop = Canvas.GetTop(node.View);
+            return left <= nodeLeft + node.View.ActualWidth &&
+                   left + width >= nodeLeft &&
+                   top <= nodeTop + node.View.ActualHeight &&
+                   top + height >= nodeTop;
+        }));
     }
 
     private void OnCanvasWheel(object sender, PointerRoutedEventArgs e)
@@ -103,7 +161,10 @@ public sealed partial class MainWindow
         if (ctrlDown)
         {
             double previous = _zoom;
-            double next = Math.Clamp(_zoom * (delta > 0 ? 1.1 : 1 / 1.1), MinZoom, MaxZoom);
+            double next = Math.Clamp(
+                _zoom * (delta > 0 ? 1.1 : 1 / 1.1),
+                Camera.MinZoom,
+                Camera.MaxZoom);
             if (Math.Abs(next - previous) < 0.0001) return;
 
             // Keep the world point under the cursor pinned while the scale changes.
@@ -121,6 +182,7 @@ public sealed partial class MainWindow
                 .HasFlag(CoreVirtualKeyStates.Down);
             if (shiftDown) _offsetX += delta; else _offsetY += delta;
             foreach (var node in _nodes) PlaceNode(node);
+            RenderWires();
             RenderAnnotations();
             DrawGrid();
             // SaveCamera is the only thing that copies the offsets into the model, so skipping it
@@ -132,8 +194,13 @@ public sealed partial class MainWindow
 
     private void OnResetView(object sender, RoutedEventArgs e)
     {
-        _zoom = 1.0;
-        _offsetX = _offsetY = 0;
+        Camera camera = Camera.Fit(
+            _workspace.Nodes,
+            Viewport.ActualWidth,
+            Viewport.ActualHeight);
+        _zoom = camera.Zoom;
+        _offsetX = camera.OffsetX;
+        _offsetY = camera.OffsetY;
         ApplyLayout();
         SaveCamera();
     }
@@ -153,7 +220,9 @@ public sealed partial class MainWindow
         if (width <= 0 || height <= 0) return;
 
         GridLines.Children.Clear();
-        double spacing = 40 * _zoom;
+        double worldSpacing = 40;
+        while (worldSpacing * _zoom < 20) worldSpacing *= 5;
+        double spacing = worldSpacing * _zoom;
         double startX = ((_offsetX % spacing) + spacing) % spacing;
         double startY = ((_offsetY % spacing) + spacing) % spacing;
         var minor = new SolidColorBrush(Windows.UI.Color.FromArgb(24, 121, 98, 140));

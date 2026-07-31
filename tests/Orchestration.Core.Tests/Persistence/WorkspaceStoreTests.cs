@@ -182,6 +182,18 @@ public class WorkspaceStoreTests : IDisposable
         Assert.Equal(Camera.MaxZoom, workspace.Camera.Zoom);
     }
 
+    [Fact]
+    public void Load_PreservesWideCanvasZoom()
+    {
+        WriteWorkspace("""
+            { "Version": 1, "Camera": { "Zoom": 0.05 }, "Nodes": [], "Connections": [] }
+            """);
+
+        var workspace = new WorkspaceStore(_paths).Load();
+
+        Assert.Equal(Camera.MinZoom, workspace.Camera.Zoom);
+    }
+
     private void WriteWorkspace(string json)
     {
         Directory.CreateDirectory(_root);
