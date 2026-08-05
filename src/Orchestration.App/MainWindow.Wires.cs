@@ -37,12 +37,12 @@ public sealed partial class MainWindow
             _rubberWire.StrokeThickness = 5;
             Wires.Children.Add(_rubberWire);
             surface.CapturePointer(e.Pointer);
-            UpdateRubber(_wireStart);
+            UpdateRubberWire(_wireStart);
             e.Handled = true;
         };
         surface.PointerMoved += (_, e) =>
         {
-            if (_wireSource == entry) UpdateRubber(e.GetCurrentPoint(Viewport).Position);
+            if (_wireSource == entry) UpdateRubberWire(e.GetCurrentPoint(Viewport).Position);
         };
         surface.PointerReleased += (_, e) =>
         {
@@ -101,7 +101,8 @@ public sealed partial class MainWindow
         return new Rect(topLeft, new Size(framework.ActualWidth, framework.ActualHeight)).Contains(point);
     }
 
-    private void UpdateRubber(Point target)
+    /// <summary>The cable being dragged. The tool ruler has its own rubber band; different things.</summary>
+    private void UpdateRubberWire(Point target)
     {
         if (_rubberWire is null || _wireSource is null) return;
         SetCurve(_rubberWire, _wireStart, target);

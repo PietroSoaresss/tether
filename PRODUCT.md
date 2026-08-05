@@ -39,4 +39,4 @@ Técnico, confiante e simples. A personalidade tem a energia irreverente do Sent
 
 ## Accessibility & Inclusion
 
-Alvo WCAG AA para contraste. Todo estado colorido também deve ter texto, ícone ou forma; foco de teclado permanece visível; terminal e notas respeitam piso tipográfico de 10 px; controles principais têm alvos confortáveis; animações são curtas, funcionais e dispensáveis quando movimento reduzido estiver ativo.
+Alvo WCAG AA para contraste. Todo estado colorido também deve ter texto, ícone ou forma; foco de teclado permanece visível; terminal e notas nunca são exibidos em tamanho ilegível — abaixo de 40% de zoom o nó vira cartão em vez de encolher a tipografia; controles principais têm alvos confortáveis; animações são curtas, funcionais e dispensáveis quando movimento reduzido estiver ativo.

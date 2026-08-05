@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using Orchestration.Core.Models;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI.Core;
@@ -16,12 +17,7 @@ public sealed partial class MainWindow
     // Camera owns the range; keeping a second pair here is what let the view and the store disagree.
     private const double MinZoom = Camera.MinZoom, MaxZoom = Camera.MaxZoom;
 
-    /// <summary>
-    /// Below this the node box is too small for its own 12 px font floor, so the terminal would ask
-    /// xterm to fit a handful of columns and resize the pseudoconsole to match. Nodes swap to a
-    /// cheap card instead: the session keeps running, only the presentation changes.
-    /// </summary>
-    private const double CollapseZoom = 0.4;
+    private const double CollapseZoom = Camera.CollapseZoom;
 
     private double _zoom = 1.0, _offsetX, _offsetY;
     private Point _panStart;
@@ -111,17 +107,7 @@ public sealed partial class MainWindow
 
         if (ctrlDown)
         {
-            double previous = _zoom;
-            double next = Math.Clamp(_zoom * (delta > 0 ? 1.1 : 1 / 1.1), MinZoom, MaxZoom);
-            if (Math.Abs(next - previous) < 0.0001) return;
-
-            // Keep the world point under the cursor pinned while the scale changes.
-            double ratio = next / previous;
-            _offsetX = point.Position.X - (point.Position.X - _offsetX) * ratio;
-            _offsetY = point.Position.Y - (point.Position.Y - _offsetY) * ratio;
-            _zoom = next;
-            ApplyLayout();
-            SaveCamera();
+            ZoomAt(point.Position, delta > 0);
         }
         else
         {
@@ -137,6 +123,37 @@ public sealed partial class MainWindow
             SaveCamera();
         }
         e.Handled = true;
+    }
+
+    /// <summary>One zoom step, keeping the world point under <paramref name="anchor"/> pinned.</summary>
+    private void ZoomAt(Point anchor, bool zoomIn)
+    {
+        double previous = _zoom;
+        double next = Math.Clamp(_zoom * (zoomIn ? 1.1 : 1 / 1.1), MinZoom, MaxZoom);
+        if (Math.Abs(next - previous) < 0.0001) return;
+
+        double ratio = next / previous;
+        _offsetX = anchor.X - (anchor.X - _offsetX) * ratio;
+        _offsetY = anchor.Y - (anchor.Y - _offsetY) * ratio;
+        _zoom = next;
+        ApplyLayout();
+        SaveCamera();
+    }
+
+    /// <summary>
+    /// Ctrl+wheel that landed on a terminal's web content, forwarded by the page. Without this the
+    /// gesture never reaches the canvas: the pointer is over a WebView2, so the browser answers
+    /// first and zooms that one terminal's page. The node's centre is the anchor — the page's own
+    /// coordinates do not survive the trip across the WebView2 boundary, and with the pointer on a
+    /// node, keeping that node where it is was the intent anyway.
+    /// </summary>
+    private void ZoomAtNode(FrameworkElement view, double pageDelta)
+    {
+        Point centre = view
+            .TransformToVisual(Viewport)
+            .TransformPoint(new Point(view.ActualWidth / 2, view.ActualHeight / 2));
+        // A page wheel delta is positive scrolling down — the opposite sign of the pointer's.
+        ZoomAt(centre, pageDelta < 0);
     }
 
     /// <summary>

@@ -16,6 +16,23 @@ public sealed class Camera
     public const double MaxZoom = 4.0;
     public const double DefaultZoom = 1.0;
 
+    /// <summary>
+    /// Below this a node stops being a scaled view and becomes a card: identity only, session still
+    /// running. This is what keeps PRODUCT.md principle 5 — a card is readable at any zoom, whereas
+    /// a terminal with its font clamped is a handful of garbled columns.
+    /// </summary>
+    public const double CollapseZoom = 0.4;
+
+    /// <summary>
+    /// The type size a node draws at. Strictly proportional, and that is a correctness requirement,
+    /// not taste: a terminal runs at <c>(width × zoom) / (charWidth × zoom)</c> columns, constant
+    /// only while both sides scale together. A clamp takes zoom out of the numerator and the node
+    /// starts resizing the pseudoconsole on every notch, so the shell reflows its output. Legibility
+    /// when the box gets small is <see cref="CollapseZoom"/>'s job. The floor here is only the
+    /// "a font size must be positive" rule that xterm and XAML both impose.
+    /// </summary>
+    public static double FontSize(double baseSize, double zoom) => Math.Max(baseSize * zoom, 1);
+
     public double OffsetX { get; set; }
     public double OffsetY { get; set; }
     public double Zoom { get; set; } = DefaultZoom;

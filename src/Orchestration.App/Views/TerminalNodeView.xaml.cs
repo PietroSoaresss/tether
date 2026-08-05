@@ -15,6 +15,9 @@ namespace Orchestration.App.Views;
 
 public sealed partial class TerminalNodeView : UserControl, INodeView
 {
+    /// <summary>Header height in world units; on screen it is this times the zoom.</summary>
+    private const double HeaderHeight = 44;
+
     // One browser process family for every terminal on the canvas.
     private static CoreWebView2Environment? _sharedEnvironment;
     private static readonly SemaphoreSlim EnvironmentLock = new(1, 1);
@@ -68,6 +71,9 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     public event Action<int>? ProcessExited;
     public event Action? Starting;
 
+    /// <summary>Ctrl+wheel landed on the web content. The argument is the page's wheel delta.</summary>
+    public event Action<double>? ZoomRequested;
+
     public event Action<TerminalNodeView>? CloseRequested;
 
     public TerminalNodeView()
@@ -110,6 +116,9 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.AreDevToolsEnabled = true;
+        // Browser page zoom on a node is never what the user meant: they were zooming the canvas
+        // and the pointer happened to be over a terminal. The page forwards the gesture instead.
+        core.Settings.IsZoomControlEnabled = false;
 
         core.SetVirtualHostNameToFolderMapping(
             "term.local",
@@ -143,6 +152,10 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
             case "i":
                 var text = message.GetProperty("d").GetString();
                 if (!string.IsNullOrEmpty(text)) _session?.Write(text);
+                break;
+
+            case "zoom":
+                ZoomRequested?.Invoke(message.GetProperty("d").GetDouble());
                 break;
         }
     }
@@ -234,18 +247,41 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
         StateDot.Fill = (Brush)Application.Current.Resources["TetherDangerBrush"];
     }
 
-    /// <summary>Zoom is applied as layout, never as a transform: the WebView2 surface is not scalable.</summary>
+    /// <summary>
+    /// Zoom reaches the body as layout, never as a transform: the WebView2 surface is not scalable.
+    /// The font tracks the same scale through <see cref="Camera.FontSize"/>, which is what keeps the
+    /// pseudoconsole's column count constant across the zoom range — see the note there.
+    /// </summary>
     public void ApplyZoom(double zoom)
     {
         _lastZoom = zoom;
+        SyncHeaderChrome();
         if (Web.CoreWebView2 is null || !_pageReady) return;
         Web.CoreWebView2.PostWebMessageAsString(
             JsonSerializer.Serialize(new
             {
                 t = "font",
-                size = Math.Clamp(_baseFontSize * zoom, 12, 48),
+                size = Camera.FontSize(_baseFontSize, zoom),
                 family = _fontFamily
             }));
+    }
+
+    private void OnHeaderSizeChanged(object sender, SizeChangedEventArgs e) => SyncHeaderChrome();
+
+    /// <summary>
+    /// The header is laid out at 1× and painted scaled, so its padding, glyphs, badge and buttons
+    /// track the zoom without a FontSize per element. Collapsed it is a card rather than a scaled
+    /// view, and stays at device size — a card scaled to 20% would defeat the point of collapsing.
+    /// </summary>
+    private void SyncHeaderChrome()
+    {
+        if (_lastZoom <= 0) return;
+        double scale = _collapsed ? 1 : _lastZoom;
+        HeaderScale.ScaleX = HeaderScale.ScaleY = scale;
+        // NaN is Auto: collapsed, the content stretches into the star-sized row as it always did.
+        HeaderContent.Width = _collapsed ? double.NaN : Math.Max(HeaderBar.ActualWidth / scale, 0);
+        HeaderContent.Height = _collapsed ? double.NaN : HeaderHeight;
+        if (!_collapsed) HeaderRow.Height = new GridLength(HeaderHeight * _lastZoom);
     }
 
     private void ApplyKind()
@@ -262,12 +298,13 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
 
         // The header grows to fill the node instead of a separate card, so it stays the drag handle
         // the canvas registered at creation time.
-        HeaderRow.Height = collapsed ? new GridLength(1, GridUnitType.Star) : new GridLength(44);
+        HeaderRow.Height = collapsed ? new GridLength(1, GridUnitType.Star) : new GridLength(HeaderHeight * _lastZoom);
         ContentRow.Height = collapsed ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         HeaderActions.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         ProjectText.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         // A zero-height WebView2 still composites; hiding it is what actually buys the frame time.
         Web.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+        SyncHeaderChrome();
     }
 
     public void ApplySettings(string family, double size)

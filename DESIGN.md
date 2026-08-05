@@ -46,7 +46,7 @@ Um desenvolvedor coordena vários agentes por horas, frequentemente num escritó
 - Marca e títulos compactos: `Segoe UI Variable Display`, 14–16 px, peso 600.
 - Terminal e Markdown bruto: `Cascadia Mono, Consolas`, configurável.
 - Preview Markdown: família da interface.
-- Terminal e notas nunca ficam menores que 12 px durante o zoom.
+- No zoom, a tipografia de terminal e nota é estritamente proporcional — nunca travada num piso. Abaixo de 40% o nó vira cartão (identidade só, sessão viva); é o cartão que garante legibilidade, não um clamp de fonte. Travar a fonte desalinha o terminal do próprio box e faz o pseudoconsole ser redimensionado a cada notch de zoom.
 
 ## Surfaces and depth
 

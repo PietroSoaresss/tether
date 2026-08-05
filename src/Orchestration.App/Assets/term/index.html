@@ -87,6 +87,16 @@
       }
     });
 
+    // Ctrl+wheel is the canvas's zoom gesture, but the pointer is over web content here, so the
+    // page would answer it first — silently zooming this one terminal instead of the canvas.
+    // Hand it to the host and let the canvas own zoom everywhere. Plain wheel stays with xterm,
+    // which is the scrollback.
+    window.addEventListener('wheel', e => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      host.postMessage(JSON.stringify({ t: 'zoom', d: e.deltaY }));
+    }, { passive: false });
+
     new ResizeObserver(() => reportSize()).observe(document.getElementById('term'));
     reportSize();
     host.postMessage(JSON.stringify({ t: 'ready', cols: term.cols, rows: term.rows }));

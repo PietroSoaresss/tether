@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Orchestration.App.Views;
@@ -126,12 +127,17 @@ public sealed partial class MainWindow
     private string _shellKind = AgentKind.PowerShell.Id;
     private string _workingDirectory = "";
 
+    private MenuFlyout? _terminalMenu;
+
     /// <summary>
     /// Builds the agent menu from the one table that knows the kinds, so adding an agent does not
-    /// mean remembering to edit XAML too.
+    /// mean remembering to edit XAML too. One instance for every entry point that asks for a
+    /// terminal — the toolbar, the canvas ruler and the keyboard shortcut.
     /// </summary>
-    private void BuildTerminalMenu()
+    private MenuFlyout TerminalMenu()
     {
+        if (_terminalMenu is not null) return _terminalMenu;
+
         var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
         foreach (var kind in AgentKind.All)
         {
@@ -144,8 +150,15 @@ public sealed partial class MainWindow
             item.Click += OnPickShell;
             flyout.Items.Add(item);
         }
-        NewTerminalButton.Flyout = flyout;
+        return _terminalMenu = flyout;
     }
+
+    /// <summary>
+    /// Every route to a new terminal asks which agent. Creating with whatever was picked last is how
+    /// pressing "Terminal" ends up silently launching a Claude.
+    /// </summary>
+    private void OnNewTerminal(object sender, RoutedEventArgs e) =>
+        TerminalMenu().ShowAt(sender as FrameworkElement ?? NewTerminalButton);
 
     /// <summary>
     /// Every click opens the menu. It used to create straight away using whichever kind was picked
@@ -416,6 +429,7 @@ public sealed partial class MainWindow
                 view.ApplySettings(_settings.TerminalFontFamily, _settings.TerminalFontSize);
                 view.ApplyAccent(terminalModel.AccentColor);
                 view.Starting += () => PrimeAgent(terminalModel);
+                view.ZoomRequested += delta => ZoomAtNode(view, delta);
                 view.CloseRequested += RemoveNode;
                 _terminalViews[terminalModel.Id] = view;
                 AddNode(view, view, model);
