@@ -61,12 +61,14 @@ public sealed class WorkspaceStore
 
         workspace.Nodes.RemoveAll(node => node is null);
         workspace.Connections.RemoveAll(connection => connection is null);
-        workspace.CanvasItems.RemoveAll(item => item is null);
+        workspace.CanvasItems.RemoveAll(item => item is null || IsInvisible(item));
         foreach (var item in workspace.CanvasItems)
         {
             item.Points ??= new List<CanvasPoint>();
             item.Text ??= "";
             item.Color ??= "#F5F3F7";
+            item.Font ??= "ui";
+            item.Align ??= "left";
         }
         foreach (var terminal in workspace.Nodes.OfType<TerminalNode>())
         {
@@ -88,4 +90,18 @@ public sealed class WorkspaceStore
 
         return workspace;
     }
+
+    /// <summary>
+    /// An item that renders as nothing and so can never be selected or erased — it just accumulates
+    /// in the file. The editor already drops a blank text when the caret leaves it, but that hook
+    /// cannot run if the app is closed or killed mid-edit, and a stroke is written on pointer-down
+    /// so a click that never became a drag leaves a one-point polyline behind.
+    /// </summary>
+    private static bool IsInvisible(CanvasItem item) => item.Kind switch
+    {
+        CanvasItemKind.Text => string.IsNullOrWhiteSpace(item.Text),
+        CanvasItemKind.Stroke => item.Points is null || item.Points.Count < 2,
+        // Every other kind spans two corners; one point is half a shape.
+        _ => item.Points is null || item.Points.Count < 2
+    };
 }

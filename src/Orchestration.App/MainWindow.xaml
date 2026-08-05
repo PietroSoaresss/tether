@@ -323,6 +323,79 @@
                                     Click="OnCanvasColor">
                                 <Ellipse Width="15" Height="15" Fill="#F1C75B" />
                             </Button>
+                            <StackPanel x:Name="CanvasTextGroup"
+                                        Orientation="Horizontal"
+                                        Spacing="5">
+                                <Border Width="1"
+                                        Height="20"
+                                        Margin="3,0"
+                                        Background="{ThemeResource TetherBorderBrush}" />
+                                <ToggleButton x:Name="TextFontUi"
+                                              Tag="ui"
+                                              Style="{StaticResource TetherCanvasToolStyle}"
+                                              Click="OnCanvasTextFont"
+                                              ToolTipService.ToolTip="Fonte da interface">
+                                    <TextBlock Text="Aa" FontFamily="Segoe UI Variable Text" FontSize="13" />
+                                </ToggleButton>
+                                <ToggleButton x:Name="TextFontSerif"
+                                              Tag="serif"
+                                              Style="{StaticResource TetherCanvasToolStyle}"
+                                              Click="OnCanvasTextFont"
+                                              ToolTipService.ToolTip="Fonte com serifa">
+                                    <TextBlock Text="Aa" FontFamily="Georgia" FontSize="13" />
+                                </ToggleButton>
+                                <ToggleButton x:Name="TextFontMono"
+                                              Tag="mono"
+                                              Style="{StaticResource TetherCanvasToolStyle}"
+                                              Click="OnCanvasTextFont"
+                                              ToolTipService.ToolTip="Fonte monoespaçada">
+                                    <TextBlock Text="Aa" FontFamily="Cascadia Mono, Consolas" FontSize="12" />
+                                </ToggleButton>
+
+                                <Border Width="1"
+                                        Height="20"
+                                        Margin="3,0"
+                                        Background="{ThemeResource TetherBorderBrush}" />
+                                <ToggleButton x:Name="TextBoldToggle"
+                                              Style="{StaticResource TetherCanvasToolStyle}"
+                                              Click="OnCanvasTextBold"
+                                              ToolTipService.ToolTip="Negrito">
+                                    <TextBlock Text="B" FontSize="13" FontWeight="Bold" />
+                                </ToggleButton>
+                                <ToggleButton x:Name="TextItalicToggle"
+                                              Style="{StaticResource TetherCanvasToolStyle}"
+                                              Click="OnCanvasTextItalic"
+                                              ToolTipService.ToolTip="Itálico">
+                                    <TextBlock Text="I" FontSize="13" FontStyle="Italic" />
+                                </ToggleButton>
+
+                                <Border Width="1"
+                                        Height="20"
+                                        Margin="3,0"
+                                        Background="{ThemeResource TetherBorderBrush}" />
+                                <ToggleButton x:Name="TextAlignLeft"
+                                              Tag="left"
+                                              Style="{StaticResource TetherCanvasToolStyle}"
+                                              Click="OnCanvasTextAlign"
+                                              ToolTipService.ToolTip="Alinhar à esquerda">
+                                    <FontIcon Glyph="&#xE8E4;" FontSize="13" />
+                                </ToggleButton>
+                                <ToggleButton x:Name="TextAlignCenter"
+                                              Tag="center"
+                                              Style="{StaticResource TetherCanvasToolStyle}"
+                                              Click="OnCanvasTextAlign"
+                                              ToolTipService.ToolTip="Centralizar">
+                                    <FontIcon Glyph="&#xE8E3;" FontSize="13" />
+                                </ToggleButton>
+                                <ToggleButton x:Name="TextAlignRight"
+                                              Tag="right"
+                                              Style="{StaticResource TetherCanvasToolStyle}"
+                                              Click="OnCanvasTextAlign"
+                                              ToolTipService.ToolTip="Alinhar à direita">
+                                    <FontIcon Glyph="&#xE8E2;" FontSize="13" />
+                                </ToggleButton>
+                            </StackPanel>
+
                             <Border x:Name="CanvasSizeDivider"
                                     Width="1"
                                     Height="20"

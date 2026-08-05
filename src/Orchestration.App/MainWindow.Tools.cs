@@ -26,7 +26,12 @@ public sealed partial class MainWindow
     private string _canvasTool = "select";
     private string _canvasColor = "#F5F3F7";
     private double _drawSize = 3;
-    private double _textSize = 18;
+
+    /// <summary>
+    /// Style the next text will be created with. It is a CanvasItem rather than one field per
+    /// property so that "apply to the selection" and "apply to the next one" are the same code.
+    /// </summary>
+    private readonly CanvasItem _textDefaults = new() { Kind = CanvasItemKind.Text, Size = 18 };
     private CanvasItem? _activeStroke;
     private Polyline? _activeStrokeView;
     private CanvasItem? _selectedItem;
@@ -117,10 +122,60 @@ public sealed partial class MainWindow
         CanvasSizeLabel.Visibility = hasSize ? Visibility.Visible : Visibility.Collapsed;
         CanvasSizeUp.Visibility = hasSize ? Visibility.Visible : Visibility.Collapsed;
         CanvasSizeLabel.Text = $"{CurrentSize():0}";
+
+        // The text group follows the same rule: edit the selected text, or arm the next one.
+        var style = TextStyleSource();
+        CanvasTextGroup.Visibility = style is null ? Visibility.Collapsed : Visibility.Visible;
+        if (style is null) return;
+
+        TextFontUi.IsChecked = style.Font == "ui";
+        TextFontSerif.IsChecked = style.Font == "serif";
+        TextFontMono.IsChecked = style.Font == "mono";
+        TextBoldToggle.IsChecked = style.Bold;
+        TextItalicToggle.IsChecked = style.Italic;
+        TextAlignLeft.IsChecked = style.Align == "left";
+        TextAlignCenter.IsChecked = style.Align == "center";
+        TextAlignRight.IsChecked = style.Align == "right";
     }
 
+    /// <summary>The item text styling applies to: the selected text, else the armed defaults.</summary>
+    private CanvasItem? TextStyleSource() =>
+        _selectedItem is { Kind: CanvasItemKind.Text } selected ? selected
+        : _selectedItem is null && _canvasTool == "text" ? _textDefaults
+        : null;
+
     private double CurrentSize() =>
-        _selectedItem?.Size ?? (_canvasTool == "text" ? _textSize : _drawSize);
+        _selectedItem?.Size ?? (_canvasTool == "text" ? _textDefaults.Size : _drawSize);
+
+    private void OnCanvasTextFont(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToggleButton { Tag: string font }) StyleText(item => item.Font = font);
+    }
+
+    private void OnCanvasTextBold(object sender, RoutedEventArgs e) =>
+        StyleText(item => item.Bold = !item.Bold);
+
+    private void OnCanvasTextItalic(object sender, RoutedEventArgs e) =>
+        StyleText(item => item.Italic = !item.Italic);
+
+    private void OnCanvasTextAlign(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToggleButton { Tag: string align }) StyleText(item => item.Align = align);
+    }
+
+    /// <summary>Applies a style change to the selected text, or to whatever the next one will be.</summary>
+    private void StyleText(Action<CanvasItem> apply)
+    {
+        if (TextStyleSource() is not { } target) return;
+
+        apply(target);
+        if (!ReferenceEquals(target, _textDefaults))
+        {
+            PositionAnnotation(target, _annotationViews[target.Id]);
+            _autosave.Touch();
+        }
+        UpdateCanvasToolContext();
+    }
 
     private void OnCanvasColor(object sender, RoutedEventArgs e)
     {
@@ -158,7 +213,7 @@ public sealed partial class MainWindow
             _autosave.Touch();
         }
         else if (_canvasTool == "text")
-            _textSize = Math.Clamp(_textSize + delta * 2, 10, 96);
+            _textDefaults.Size = Math.Clamp(_textDefaults.Size + delta * 2, 10, 96);
         else
             _drawSize = Math.Clamp(_drawSize + delta, 1, 12);
 
@@ -185,17 +240,20 @@ public sealed partial class MainWindow
                 Kind = CanvasItemKind.Text,
                 X = world.X,
                 Y = world.Y,
-                Text = "Texto",
                 Color = _canvasColor,
-                Size = _textSize
+                Size = _textDefaults.Size,
+                Font = _textDefaults.Font,
+                Bold = _textDefaults.Bold,
+                Italic = _textDefaults.Italic,
+                Align = _textDefaults.Align
             };
             _workspace.CanvasItems.Add(item);
-            var box = (TextBox)EnsureAnnotationView(item);
-            PositionAnnotation(item, box);
-            box.Focus(FocusState.Programmatic);
-            box.SelectAll();
-            _autosave.Touch();
+            PositionAnnotation(item, EnsureAnnotationView(item));
+            // Born empty and straight into the caret. EndTextEdit drops it again if nothing is
+            // typed, so a stray click cannot leave an invisible item on the canvas.
+            BeginTextEdit(item);
             SetCanvasTool("select");
+            SelectAnnotation(item);
             e.Handled = true;
             return true;
         }
@@ -397,7 +455,10 @@ public sealed partial class MainWindow
                 StrokeEndLineCap = PenLineCap.Round,
                 StrokeLineJoin = PenLineJoin.Round
             },
-            CanvasItemKind.Text => NewTextAnnotation(item),
+            // Text is a rendered label until someone double-taps it. A permanently live TextBox
+            // eats the pointer for its own caret and selection, which is why text was the one
+            // annotation that could not be dragged.
+            CanvasItemKind.Text => new TextBlock { TextWrapping = TextWrapping.Wrap, MaxWidth = 480 },
             CanvasItemKind.Rectangle => new Rectangle { Fill = TransparentFill() },
             CanvasItemKind.Ellipse => new Ellipse { Fill = TransparentFill() },
             CanvasItemKind.Diamond => new Polygon { Fill = TransparentFill() },
@@ -408,18 +469,34 @@ public sealed partial class MainWindow
             }
         };
 
-        view.PointerPressed += (_, e) => OnAnnotationPressed(item, e);
+        HookAnnotation(item, view);
         _annotationViews[item.Id] = view;
         Annotations.Children.Add(view);
         return view;
     }
 
-    /// <summary>Shapes are outlines, but a hollow shape can only be grabbed by its 1 px edge.</summary>
-    private static Brush TransparentFill() =>
-        new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0));
-
-    private TextBox NewTextAnnotation(CanvasItem item)
+    private void HookAnnotation(CanvasItem item, FrameworkElement view)
     {
+        view.PointerPressed += (_, e) => OnAnnotationPressed(item, e);
+        if (item.Kind != CanvasItemKind.Text) return;
+
+        view.DoubleTapped += (_, e) =>
+        {
+            if (_canvasTool != "select") return;
+            BeginTextEdit(item);
+            e.Handled = true;
+        };
+    }
+
+    /// <summary>Swaps the rendered label for a live editor, in place.</summary>
+    private void BeginTextEdit(CanvasItem item)
+    {
+        if (_annotationViews[item.Id] is TextBox already)
+        {
+            already.Focus(FocusState.Programmatic);
+            return;
+        }
+
         var box = new TextBox
         {
             Text = item.Text,
@@ -428,16 +505,61 @@ public sealed partial class MainWindow
             Padding = new Thickness(2),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
-            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            BorderThickness = new Thickness(0)
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent)
         };
         box.TextChanged += (_, _) =>
         {
             item.Text = box.Text;
             _autosave.Touch();
         };
-        return box;
+        box.LostFocus += (_, _) => EndTextEdit(item);
+
+        SwapAnnotationView(item, box);
+        box.Focus(FocusState.Programmatic);
+        box.SelectAll();
     }
+
+    private void EndTextEdit(CanvasItem item)
+    {
+        if (_annotationViews.GetValueOrDefault(item.Id) is not TextBox) return;
+
+        // Nothing typed: the item would render as an invisible zero-size label nobody can select.
+        if (string.IsNullOrWhiteSpace(item.Text))
+        {
+            _workspace.CanvasItems.Remove(item);
+            if (_annotationViews.Remove(item.Id, out var stale)) Annotations.Children.Remove(stale);
+            if (_selectedItem?.Id == item.Id) SelectAnnotation(null);
+            _autosave.Touch();
+            return;
+        }
+
+        SwapAnnotationView(item, new TextBlock { TextWrapping = TextWrapping.Wrap, MaxWidth = 480 });
+        _autosave.Touch();
+    }
+
+    private void SwapAnnotationView(CanvasItem item, FrameworkElement replacement)
+    {
+        var previous = _annotationViews[item.Id];
+        // Keep the z-order: annotations are drawn in list order, so appending would lift the text
+        // above everything drawn after it just because it was edited.
+        int index = Annotations.Children.IndexOf(previous);
+        Annotations.Children.RemoveAt(index);
+        Annotations.Children.Insert(index, replacement);
+        _annotationViews[item.Id] = replacement;
+        HookAnnotation(item, replacement);
+        PositionAnnotation(item, replacement);
+    }
+
+    /// <summary>Shapes are outlines, but a hollow shape can only be grabbed by its 1 px edge.</summary>
+    private static Brush TransparentFill() =>
+        new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0));
+
+    private static FontFamily TextFontFamily(string? font) => new(font switch
+    {
+        "mono" => "Cascadia Mono, Consolas",
+        "serif" => "Georgia, Times New Roman",
+        _ => "Segoe UI Variable Text"
+    });
 
     private void PositionAnnotation(CanvasItem item, FrameworkElement view)
     {
@@ -452,14 +574,50 @@ public sealed partial class MainWindow
         {
             case CanvasItemKind.Text:
             {
-                var box = (TextBox)view;
-                if (box.Text != item.Text) box.Text = item.Text;
-                box.Foreground = brush;
-                box.FontSize = Math.Clamp(item.Size * _zoom, 8, 160);
-                box.BorderThickness = new Thickness(selected ? 1 : 0);
-                box.BorderBrush = SelectionBrush();
-                Canvas.SetLeft(box, item.X * _zoom + _offsetX);
-                Canvas.SetTop(box, item.Y * _zoom + _offsetY);
+                // Same rule as a node: type is strictly proportional to the zoom, never clamped.
+                double size = Camera.FontSize(item.Size, _zoom);
+                var weight = item.Bold
+                    ? Microsoft.UI.Text.FontWeights.Bold
+                    : Microsoft.UI.Text.FontWeights.Normal;
+                var slant = item.Italic
+                    ? Windows.UI.Text.FontStyle.Italic
+                    : Windows.UI.Text.FontStyle.Normal;
+                var family = TextFontFamily(item.Font);
+                var alignment = item.Align switch
+                {
+                    "center" => TextAlignment.Center,
+                    "right" => TextAlignment.Right,
+                    _ => TextAlignment.Left
+                };
+
+                if (view is TextBox box)
+                {
+                    if (box.Text != item.Text) box.Text = item.Text;
+                    box.Foreground = brush;
+                    box.FontSize = size;
+                    box.FontWeight = weight;
+                    box.FontStyle = slant;
+                    box.FontFamily = family;
+                    box.TextAlignment = alignment;
+                    box.BorderBrush = SelectionBrush();
+                    box.BorderThickness = new Thickness(1);
+                }
+                else
+                {
+                    var label = (TextBlock)view;
+                    label.Text = item.Text;
+                    // A TextBlock has no border to light up, so selection recolours it — the same
+                    // way a selected stroke or shape already reads.
+                    label.Foreground = selected ? SelectionBrush() : brush;
+                    label.FontSize = size;
+                    label.FontWeight = weight;
+                    label.FontStyle = slant;
+                    label.FontFamily = family;
+                    label.TextAlignment = alignment;
+                }
+
+                Canvas.SetLeft(view, item.X * _zoom + _offsetX);
+                Canvas.SetTop(view, item.Y * _zoom + _offsetY);
                 return;
             }
 
@@ -570,8 +728,9 @@ public sealed partial class MainWindow
         if (_canvasTool != "select") return;
         SelectAnnotation(item);
 
-        // Text keeps its caret: dragging the body would make the note impossible to edit.
-        if (item.Kind == CanvasItemKind.Text) return;
+        // While the caret is live the pointer belongs to the editor; a rendered label drags like
+        // any other annotation.
+        if (_annotationViews[item.Id] is TextBox) return;
         StartAnnotationDrag(item, e);
         e.Handled = true;
     }

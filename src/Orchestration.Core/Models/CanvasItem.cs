@@ -24,4 +24,12 @@ public sealed class CanvasItem
     public string Text { get; set; } = "";
     public string Color { get; set; } = "#F5F3F7";
     public double Size { get; set; } = 3;
+
+    // Text styling. Additive with defaults, so a workspace written before these existed loads
+    // unchanged and no Workspace.Version bump is needed — same reasoning as TerminalNode.Kind.
+    // Family is a name, not a font stack: the view owns which real fonts each name resolves to.
+    public string Font { get; set; } = "ui";
+    public bool Bold { get; set; }
+    public bool Italic { get; set; }
+    public string Align { get; set; } = "left";
 }
