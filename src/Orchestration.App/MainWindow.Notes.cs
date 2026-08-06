@@ -95,7 +95,7 @@ public sealed partial class MainWindow
     {
         string folder = Path.Combine(projectDirectory, "notes");
         bool changed = false;
-        foreach (var note in _workspace.Nodes.OfType<NoteNode>()
+        foreach (var note in AllNodes().OfType<NoteNode>()
                      .Where(note => string.IsNullOrWhiteSpace(note.WorkingDirectory)))
         {
             try

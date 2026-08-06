@@ -247,7 +247,7 @@ public sealed partial class MainWindow
                 Italic = _textDefaults.Italic,
                 Align = _textDefaults.Align
             };
-            _workspace.CanvasItems.Add(item);
+            _canvas.CanvasItems.Add(item);
             PositionAnnotation(item, EnsureAnnotationView(item));
             // Born empty and straight into the caret. EndTextEdit drops it again if nothing is
             // typed, so a stray click cannot leave an invisible item on the canvas.
@@ -268,7 +268,7 @@ public sealed partial class MainWindow
                 Size = _drawSize,
                 Points = { new CanvasPoint { X = world.X, Y = world.Y } }
             };
-            _workspace.CanvasItems.Add(_activeStroke);
+            _canvas.CanvasItems.Add(_activeStroke);
             _activeStrokeView = (Polyline)EnsureAnnotationView(_activeStroke);
             PositionAnnotation(_activeStroke, _activeStrokeView);
             Viewport.CapturePointer(e.Pointer);
@@ -416,7 +416,7 @@ public sealed partial class MainWindow
                 new CanvasPoint { X = end.X, Y = end.Y }
             }
         };
-        _workspace.CanvasItems.Add(item);
+        _canvas.CanvasItems.Add(item);
         PositionAnnotation(item, EnsureAnnotationView(item));
         _autosave.Touch();
         SetCanvasTool("select");
@@ -432,14 +432,14 @@ public sealed partial class MainWindow
 
     private void RenderAnnotations()
     {
-        var live = _workspace.CanvasItems.Select(item => item.Id).ToHashSet();
+        var live = _canvas.CanvasItems.Select(item => item.Id).ToHashSet();
         foreach (Guid stale in _annotationViews.Keys.Where(id => !live.Contains(id)).ToList())
         {
             Annotations.Children.Remove(_annotationViews[stale]);
             _annotationViews.Remove(stale);
         }
 
-        foreach (CanvasItem item in _workspace.CanvasItems)
+        foreach (CanvasItem item in _canvas.CanvasItems)
             PositionAnnotation(item, EnsureAnnotationView(item));
     }
 
@@ -526,7 +526,7 @@ public sealed partial class MainWindow
         // Nothing typed: the item would render as an invisible zero-size label nobody can select.
         if (string.IsNullOrWhiteSpace(item.Text))
         {
-            _workspace.CanvasItems.Remove(item);
+            _canvas.CanvasItems.Remove(item);
             if (_annotationViews.Remove(item.Id, out var stale)) Annotations.Children.Remove(stale);
             if (_selectedItem?.Id == item.Id) SelectAnnotation(null);
             _autosave.Touch();
@@ -717,7 +717,7 @@ public sealed partial class MainWindow
     {
         if (_canvasTool == "erase")
         {
-            _workspace.CanvasItems.Remove(item);
+            _canvas.CanvasItems.Remove(item);
             if (_annotationViews.Remove(item.Id, out var view)) Annotations.Children.Remove(view);
             if (_selectedItem?.Id == item.Id) SelectAnnotation(null);
             _autosave.Touch();

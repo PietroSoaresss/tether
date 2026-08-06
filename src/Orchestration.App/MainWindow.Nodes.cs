@@ -19,6 +19,12 @@ public sealed partial class MainWindow
         public required INodeView Node;
         public required NodeBase Model;
 
+        /// <summary>
+        /// The canvas this node lives on. Every node in the project is materialized at load, so
+        /// removal and layout have to ask which tab owns a node rather than assume the active one.
+        /// </summary>
+        public required CanvasTab Tab;
+
         public double X { get => Model.X; set => Model.X = value; }
         public double Y { get => Model.Y; set => Model.Y = value; }
         public double Width { get => Model.Width; set => Model.Width = value; }
@@ -30,13 +36,15 @@ public sealed partial class MainWindow
     private CanvasNode? _selectedNode;
 
     /// <summary>Adds a node that already has a model — used both by the toolbar and by workspace load.</summary>
-    private void AddNode(FrameworkElement view, INodeView node, NodeBase model)
+    private void AddNode(FrameworkElement view, INodeView node, NodeBase model, CanvasTab tab)
     {
-        var entry = new CanvasNode { View = view, Node = node, Model = model };
+        var entry = new CanvasNode { View = view, Node = node, Model = model, Tab = tab };
 
         _nodes.Add(entry);
-        _workspace.Nodes.Add(model);
+        tab.Nodes.Add(model);
         World.Children.Add(view);
+        // Load materializes every tab, so a node can be born onto a canvas that is not on screen.
+        view.Visibility = ReferenceEquals(tab, _canvas) ? Visibility.Visible : Visibility.Collapsed;
         PlaceNode(entry);
         node.ApplyZoom(_zoom);
         RegisterDrag(entry);
@@ -61,8 +69,8 @@ public sealed partial class MainWindow
         if (ReferenceEquals(_wireSource, entry)) CancelWire();
         if (ReferenceEquals(_selectedNode, entry)) SelectNode(null);
         _nodes.Remove(entry);
-        _workspace.Nodes.Remove(entry.Model);
-        _workspace.Connections.RemoveAll(c => c.SourceId == entry.Model.Id || c.TargetId == entry.Model.Id);
+        entry.Tab.Nodes.Remove(entry.Model);
+        entry.Tab.Connections.RemoveAll(c => c.SourceId == entry.Model.Id || c.TargetId == entry.Model.Id);
         _noteViews.Remove(entry.Model.Id);
         _terminalViews.Remove(entry.Model.Id);
         World.Children.Remove(view);
@@ -227,6 +235,7 @@ public sealed partial class MainWindow
         _fileTreeWatcher?.Dispose();
         _fileTreeRefresh?.Cancel();
 
+        _canvas = new CanvasTab();
         _nodes.Clear();
         _terminalViews.Clear();
         _noteViews.Clear();
@@ -411,8 +420,10 @@ public sealed partial class MainWindow
     }
 
     /// <summary>Builds the view for a model. The one place that knows model kind maps to view kind.</summary>
-    private void Materialize(NodeBase model, string? initialInput = null)
+    private void Materialize(NodeBase model, string? initialInput = null, CanvasTab? tab = null)
     {
+        tab ??= _canvas;
+
         switch (model)
         {
             case TerminalNode terminalModel:
@@ -432,7 +443,7 @@ public sealed partial class MainWindow
                 view.ZoomRequested += delta => ZoomAtNode(view, delta);
                 view.CloseRequested += RemoveNode;
                 _terminalViews[terminalModel.Id] = view;
-                AddNode(view, view, model);
+                AddNode(view, view, model, tab);
                 break;
             }
             case NoteNode noteModel:
@@ -440,7 +451,7 @@ public sealed partial class MainWindow
                 var view = new NoteNodeView();
                 BindNote(view, noteModel);
                 view.CloseRequested += RemoveNode;
-                AddNode(view, view, model);
+                AddNode(view, view, model, tab);
                 break;
             }
             // LoadWorkspace clears the node list before materializing, so a kind that silently

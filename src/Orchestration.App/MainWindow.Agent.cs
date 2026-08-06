@@ -31,7 +31,7 @@ public sealed partial class MainWindow
 
     private async Task<TetherResponse> HandleTetherRequestOnUi(TetherRequest request)
     {
-        if (_workspace.Nodes.All(node => node.Id != request.From))
+        if (AllNodes().All(node => node.Id != request.From))
             return TetherResponse.Failure("unknown caller");
 
         switch (request.Cmd)
@@ -39,7 +39,7 @@ public sealed partial class MainWindow
             case "list":
                 return TetherResponse.Success(string.Join(
                     Environment.NewLine,
-                    Authorization.Neighbors(_workspace, request.From)
+                    Authorization.Neighbors(TabOf(request.From), request.From)
                         .Select(node => $"{node.Id}  {(node is TerminalNode ? "terminal" : "note")}  {node.Title}")));
 
             case "note-show":
@@ -59,7 +59,7 @@ public sealed partial class MainWindow
 
     private TetherResponse HandleSpawn(TetherRequest request)
     {
-        if (_workspace.Nodes.FirstOrDefault(node => node.Id == request.From) is not TerminalNode caller)
+        if (AllNodes().FirstOrDefault(node => node.Id == request.From) is not TerminalNode caller)
             return TetherResponse.Failure("caller is not a terminal");
 
         string kind = request.Args.GetValueOrDefault("kind", "").ToLowerInvariant();
@@ -70,17 +70,19 @@ public sealed partial class MainWindow
         var agent = AgentKind.Find(kind);
         if (requestedTitle.Length > 80)
             return TetherResponse.Failure("title too long");
-        if (requestedTitle.Length > 0 && _workspace.Nodes.Any(node =>
+        if (requestedTitle.Length > 0 && AllNodes().Any(node =>
                 string.Equals(node.Title, requestedTitle, StringComparison.OrdinalIgnoreCase)))
             return TetherResponse.Failure("title already exists");
 
+        // A spawned child belongs on the caller's canvas, which is not necessarily the one on screen.
+        var canvas = TabOf(caller.Id);
         var child = new TerminalNode
         {
             Title = requestedTitle.Length > 0
                 ? requestedTitle
                 : $"{agent.Label} {Guid.NewGuid():N}"[..12],
             X = caller.X + caller.Width + 80,
-            Y = caller.Y + _workspace.Connections.Count(connection => connection.SourceId == caller.Id) * 48,
+            Y = caller.Y + canvas.Connections.Count(connection => connection.SourceId == caller.Id) * 48,
             Width = 720,
             Height = 420,
             Kind = agent.Id,
@@ -89,13 +91,13 @@ public sealed partial class MainWindow
                 ? _workingDirectory
                 : caller.WorkingDirectory
         };
-        _workspace.Connections.Add(new Connection
+        canvas.Connections.Add(new Connection
         {
             SourceId = caller.Id,
             TargetId = child.Id,
             Bidirectional = true
         });
-        Materialize(child, prompt);
+        Materialize(child, prompt, canvas);
         RenderWires();
         _autosave.Touch();
         return TetherResponse.Success($"{child.Id}  terminal  {child.Title}");
@@ -105,10 +107,10 @@ public sealed partial class MainWindow
     {
         if (!request.Args.TryGetValue("target", out string? targetText))
             return TetherResponse.Failure("missing target");
-        var target = Authorization.Resolve(_workspace, targetText);
+        var target = Authorization.Resolve(TabOf(request.From), targetText);
         if (target is not NoteNode note)
             return TetherResponse.Failure("note not found or ambiguous");
-        if (!Authorization.CanAccess(_workspace, request.From, note.Id))
+        if (!Authorization.CanAccess(TabOf(request.From), request.From, note.Id))
             return TetherResponse.Failure("no route");
         string? folder = NoteFolder(note);
         if (!_noteFiles.Exists(note.FileName, folder))
@@ -129,10 +131,10 @@ public sealed partial class MainWindow
         if (!request.Args.TryGetValue("target", out string? targetText) ||
             !request.Args.TryGetValue("prompt", out string? prompt))
             return TetherResponse.Failure("missing target or prompt");
-        var target = Authorization.Resolve(_workspace, targetText);
+        var target = Authorization.Resolve(TabOf(request.From), targetText);
         if (target is not TerminalNode terminal)
             return TetherResponse.Failure("target not found or ambiguous");
-        if (!Authorization.CanAccess(_workspace, request.From, terminal.Id))
+        if (!Authorization.CanAccess(TabOf(request.From), request.From, terminal.Id))
             return TetherResponse.Failure("no route");
         if (!_terminalViews.TryGetValue(terminal.Id, out var view) || !view.IsRunning)
             return TetherResponse.Failure("target not running");
@@ -206,7 +208,7 @@ public sealed partial class MainWindow
             AgentPrimer.Write(
                 node.WorkingDirectory,
                 node,
-                Authorization.Neighbors(_workspace, node.Id));
+                Authorization.Neighbors(TabOf(node.Id), node.Id));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

@@ -40,7 +40,9 @@ public sealed partial class MainWindow
 
     private void ApplyLayout()
     {
-        foreach (var node in _nodes)
+        // Only the canvas on screen. Nodes on other tabs keep their sessions but not their layout:
+        // they get placed when their tab comes back, and their zoom is whatever that tab's is.
+        foreach (var node in ActiveNodes())
         {
             PlaceNode(node);
             node.Node.ApplyZoom(_zoom);
@@ -81,7 +83,7 @@ public sealed partial class MainWindow
         _offsetX += now.X - _panStart.X;
         _offsetY += now.Y - _panStart.Y;
         _panStart = now;
-        foreach (var node in _nodes) PlaceNode(node);
+        foreach (var node in ActiveNodes()) PlaceNode(node);
         RenderAnnotations();
         DrawGrid();
     }
@@ -115,7 +117,7 @@ public sealed partial class MainWindow
                 .GetKeyStateForCurrentThread(VirtualKey.Shift)
                 .HasFlag(CoreVirtualKeyStates.Down);
             if (shiftDown) _offsetX += delta; else _offsetY += delta;
-            foreach (var node in _nodes) PlaceNode(node);
+            foreach (var node in ActiveNodes()) PlaceNode(node);
             RenderAnnotations();
             DrawGrid();
             // SaveCamera is the only thing that copies the offsets into the model, so skipping it
@@ -197,8 +199,8 @@ public sealed partial class MainWindow
             bottom = Math.Max(bottom, y + h);
         }
 
-        foreach (var node in _nodes) Grow(node.X, node.Y, node.Width, node.Height);
-        foreach (var item in _workspace.CanvasItems)
+        foreach (var node in ActiveNodes()) Grow(node.X, node.Y, node.Width, node.Height);
+        foreach (var item in _canvas.CanvasItems)
         {
             if (item.Points.Count > 0)
                 foreach (var point in item.Points) Grow(point.X, point.Y, 0, 0);
@@ -212,9 +214,9 @@ public sealed partial class MainWindow
 
     private void SaveCamera()
     {
-        _workspace.Camera.OffsetX = _offsetX;
-        _workspace.Camera.OffsetY = _offsetY;
-        _workspace.Camera.Zoom = _zoom;
+        _canvas.Camera.OffsetX = _offsetX;
+        _canvas.Camera.OffsetY = _offsetY;
+        _canvas.Camera.Zoom = _zoom;
         _autosave.Touch();
     }
 

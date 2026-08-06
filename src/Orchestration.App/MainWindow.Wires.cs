@@ -72,16 +72,16 @@ public sealed partial class MainWindow
         CancelWire();
         if (source is null) return;
 
-        var target = _nodes.FirstOrDefault(node =>
+        var target = ActiveNodes().FirstOrDefault(node =>
             node != source && IsInside(node.View, position));
         if (target is null) return;
-        if (_workspace.Connections.Any(connection =>
+        if (_canvas.Connections.Any(connection =>
                 connection.SourceId == source.Model.Id && connection.TargetId == target.Model.Id))
             return;
 
         var sourceAnchor = RelativeAnchor(source, start);
         var targetAnchor = RelativeAnchor(target, position);
-        _workspace.Connections.Add(new Connection
+        _canvas.Connections.Add(new Connection
         {
             SourceId = source.Model.Id,
             TargetId = target.Model.Id,
@@ -140,17 +140,17 @@ public sealed partial class MainWindow
 
     private void RenderWires()
     {
-        var live = _workspace.Connections.Select(connection => connection.Id).ToHashSet();
+        var live = _canvas.Connections.Select(connection => connection.Id).ToHashSet();
         foreach (var stale in _wirePaths.Keys.Where(id => !live.Contains(id)).ToList())
         {
             Wires.Children.Remove(_wirePaths[stale]);
             _wirePaths.Remove(stale);
         }
 
-        foreach (var connection in _workspace.Connections)
+        foreach (var connection in _canvas.Connections)
         {
-            var source = _nodes.FirstOrDefault(node => node.Model.Id == connection.SourceId);
-            var target = _nodes.FirstOrDefault(node => node.Model.Id == connection.TargetId);
+            var source = ActiveNodes().FirstOrDefault(node => node.Model.Id == connection.SourceId);
+            var target = ActiveNodes().FirstOrDefault(node => node.Model.Id == connection.TargetId);
             if (source is null || target is null) continue;
 
             if (!_wirePaths.TryGetValue(connection.Id, out var path))
@@ -207,7 +207,7 @@ public sealed partial class MainWindow
 
     private void DeleteWire(Guid id)
     {
-        _workspace.Connections.RemoveAll(connection => connection.Id == id);
+        _canvas.Connections.RemoveAll(connection => connection.Id == id);
         if (_selectedWire == id) _selectedWire = null;
         RenderWires();
         _autosave.Touch();

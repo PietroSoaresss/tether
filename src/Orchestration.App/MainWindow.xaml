@@ -424,6 +424,27 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
+                <!-- Bottom-left: the tool ruler owns the top centre, and a strip up there collides
+                     with it the moment either grows. Sheet tabs at the bottom is also the shape
+                     people already know from a spreadsheet. -->
+                <Border VerticalAlignment="Bottom"
+                        HorizontalAlignment="Left"
+                        Margin="12"
+                        Background="{ThemeResource TetherNodeBrush}"
+                        BorderBrush="{ThemeResource TetherBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="5">
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <StackPanel x:Name="TabStrip" Orientation="Horizontal" Spacing="2" />
+                        <Button Style="{StaticResource TetherNodeActionButtonStyle}"
+                                Click="OnNewTab"
+                                ToolTipService.ToolTip="Novo canvas">
+                            <FontIcon Glyph="&#xE710;" FontSize="12" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+
                 <InfoBar x:Name="RecoveryBar"
                          Severity="Warning"
                          IsOpen="False"

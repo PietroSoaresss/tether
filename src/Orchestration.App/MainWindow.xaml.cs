@@ -128,13 +128,14 @@ public sealed partial class MainWindow : Window
 
     private void RestoreWorkspace(ReadOutcome outcome)
     {
-        _offsetX = _workspace.Camera.OffsetX;
-        _offsetY = _workspace.Camera.OffsetY;
+        // WorkspaceStore guarantees at least one tab and an ActiveTabId that points at a real one.
+        _canvas = _workspace.Tabs.First(tab => tab.Id == _workspace.ActiveTabId);
+        _offsetX = _canvas.Camera.OffsetX;
+        _offsetY = _canvas.Camera.OffsetY;
         // WorkspaceStore already clamped this into Camera's range; clamping again here is how the
         // same invariant ends up half-enforced in two places.
-        _zoom = _workspace.Camera.Zoom;
+        _zoom = _canvas.Camera.Zoom;
 
-        var saved = _workspace.Nodes.ToList();
         string? activeProject = FindProjectDirectory(_workspace);
         if (activeProject is not null)
         {
@@ -146,12 +147,18 @@ public sealed partial class MainWindow : Window
         // guard every launch writes one second later with no user input — and after a recovery from
         // .bak that write rotates the corrupt primary into the backup slot, destroying the only
         // good copy while the user is still reading the warning.
+        // Every tab is materialized, not just the visible one: a terminal on another canvas is a
+        // running process, and the product's whole point is that it keeps working out of sight.
         _loading = true;
         try
         {
-            // Materialize appends to _workspace.Nodes, so iterate a snapshot and start from empty.
-            _workspace.Nodes.Clear();
-            foreach (var model in saved) Materialize(model);
+            foreach (var tab in _workspace.Tabs)
+            {
+                // Materialize appends to the tab's list, so iterate a snapshot and start from empty.
+                var saved = tab.Nodes.ToList();
+                tab.Nodes.Clear();
+                foreach (var model in saved) Materialize(model, tab: tab);
+            }
         }
         finally
         {
@@ -160,6 +167,10 @@ public sealed partial class MainWindow : Window
 
         UpdateProjectLabel();
         UpdateZoomLabel();
+        RefreshTabStrip();
+        // The context bar is built visible in XAML and only ever hidden by a tool change, so
+        // without this the size and text controls sit there before any tool has been picked.
+        UpdateCanvasToolContext();
         ApplyLayout();
 
         if (outcome == ReadOutcome.Backup)
@@ -197,7 +208,7 @@ public sealed partial class MainWindow : Window
         if (Directory.Exists(workspace.ProjectDirectory))
             return Path.GetFullPath(workspace.ProjectDirectory);
 
-        return workspace.Nodes.Select(node => node switch
+        return workspace.Tabs.SelectMany(tab => tab.Nodes).Select(node => node switch
             {
                 TerminalNode terminal => terminal.WorkingDirectory,
                 NoteNode note => note.WorkingDirectory,

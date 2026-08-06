@@ -40,9 +40,9 @@ public class WorkspaceStoreTests : IDisposable
         var workspace = store.Load();
 
         Assert.Equal(ReadOutcome.None, store.LastLoadOutcome);
-        Assert.Empty(workspace.Nodes);
-        Assert.Empty(workspace.Connections);
-        Assert.Equal(1.0, workspace.Camera.Zoom);
+        Assert.Empty(Canvas(workspace).Nodes);
+        Assert.Empty(Canvas(workspace).Connections);
+        Assert.Equal(1.0, Canvas(workspace).Camera.Zoom);
     }
 
     [Fact]
@@ -53,35 +53,44 @@ public class WorkspaceStoreTests : IDisposable
         var note = new NoteNode { Title = "nota", FileName = "nota.md" };
         var original = new Workspace
         {
-            Camera = new Camera { OffsetX = 5, OffsetY = 6, Zoom = 0.75 },
-            Nodes = { terminal, note },
-            Connections = { new Connection { SourceId = terminal.Id, TargetId = note.Id, Bidirectional = true } }
+            Tabs =
+            {
+                new CanvasTab
+                {
+                    Camera = new Camera { OffsetX = 5, OffsetY = 6, Zoom = 0.75 },
+                    Nodes = { terminal, note },
+                    Connections =
+                    {
+                        new Connection { SourceId = terminal.Id, TargetId = note.Id, Bidirectional = true }
+                    }
+                }
+            }
         };
 
         store.Save(original);
         var loaded = store.Load();
 
         Assert.Equal(ReadOutcome.Primary, store.LastLoadOutcome);
-        Assert.Equal(2, loaded.Nodes.Count);
-        Assert.Equal("claude", Assert.IsType<TerminalNode>(loaded.Nodes[0]).Title);
-        Assert.Equal("nota.md", Assert.IsType<NoteNode>(loaded.Nodes[1]).FileName);
-        Assert.True(loaded.Connections[0].Bidirectional);
-        Assert.Equal(0.75, loaded.Camera.Zoom);
+        Assert.Equal(2, Canvas(loaded).Nodes.Count);
+        Assert.Equal("claude", Assert.IsType<TerminalNode>(Canvas(loaded).Nodes[0]).Title);
+        Assert.Equal("nota.md", Assert.IsType<NoteNode>(Canvas(loaded).Nodes[1]).FileName);
+        Assert.True(Canvas(loaded).Connections[0].Bidirectional);
+        Assert.Equal(0.75, Canvas(loaded).Camera.Zoom);
     }
 
     [Fact]
     public void Load_RecoversFromTheBackupWhenThePrimaryIsCorrupt()
     {
         var store = new WorkspaceStore(_paths);
-        store.Save(new Workspace { Nodes = { new NoteNode { Title = "sobrevivente", FileName = "a.md" } } });
-        store.Save(new Workspace { Nodes = { new NoteNode { Title = "mais novo", FileName = "b.md" } } });
+        store.Save(new Workspace { Tabs = { new CanvasTab { Nodes = { new NoteNode { Title = "sobrevivente", FileName = "a.md" } } } } });
+        store.Save(new Workspace { Tabs = { new CanvasTab { Nodes = { new NoteNode { Title = "mais novo", FileName = "b.md" } } } } });
 
         File.WriteAllText(_paths.WorkspaceFile, "{ truncado");
 
         var loaded = store.Load();
 
         Assert.Equal(ReadOutcome.Backup, store.LastLoadOutcome);
-        Assert.Equal("sobrevivente", loaded.Nodes[0].Title);
+        Assert.Equal("sobrevivente", Canvas(loaded).Nodes[0].Title);
     }
 
     [Fact]
@@ -101,7 +110,7 @@ public class WorkspaceStoreTests : IDisposable
         var workspace = new WorkspaceStore(_paths).Load();
 
         // A zero zoom would divide by zero the moment the canvas placed a node.
-        Assert.Equal(1.0, workspace.Camera.Zoom);
+        Assert.Equal(1.0, Canvas(workspace).Camera.Zoom);
         Assert.Equal(Workspace.CurrentVersion, workspace.Version);
     }
 
@@ -114,8 +123,8 @@ public class WorkspaceStoreTests : IDisposable
 
         var workspace = new WorkspaceStore(_paths).Load();
 
-        Assert.NotNull(workspace.Camera);
-        Assert.Equal(1.0, workspace.Camera.Zoom);
+        Assert.NotNull(Canvas(workspace).Camera);
+        Assert.Equal(1.0, Canvas(workspace).Camera.Zoom);
     }
 
     [Fact]
@@ -127,8 +136,8 @@ public class WorkspaceStoreTests : IDisposable
 
         var workspace = new WorkspaceStore(_paths).Load();
 
-        Assert.NotNull(workspace.Nodes);
-        Assert.Empty(workspace.Nodes);
+        Assert.NotNull(Canvas(workspace).Nodes);
+        Assert.Empty(Canvas(workspace).Nodes);
     }
 
     [Fact]
@@ -140,8 +149,8 @@ public class WorkspaceStoreTests : IDisposable
 
         var workspace = new WorkspaceStore(_paths).Load();
 
-        Assert.NotNull(workspace.Connections);
-        Assert.Empty(workspace.Connections);
+        Assert.NotNull(Canvas(workspace).Connections);
+        Assert.Empty(Canvas(workspace).Connections);
     }
 
     [Fact]
@@ -153,7 +162,7 @@ public class WorkspaceStoreTests : IDisposable
 
         var workspace = new WorkspaceStore(_paths).Load();
 
-        Assert.Empty(workspace.Nodes);
+        Assert.Empty(Canvas(workspace).Nodes);
     }
 
     [Fact]
@@ -167,7 +176,7 @@ public class WorkspaceStoreTests : IDisposable
 
         // The migration only repaired version 0, so a current-version file carried the divide by
         // zero straight through to the canvas.
-        Assert.Equal(Camera.DefaultZoom, workspace.Camera.Zoom);
+        Assert.Equal(Camera.DefaultZoom, Canvas(workspace).Camera.Zoom);
     }
 
     [Fact]
@@ -179,7 +188,7 @@ public class WorkspaceStoreTests : IDisposable
 
         var workspace = new WorkspaceStore(_paths).Load();
 
-        Assert.Equal(Camera.MaxZoom, workspace.Camera.Zoom);
+        Assert.Equal(Camera.MaxZoom, Canvas(workspace).Camera.Zoom);
     }
 
     private void WriteWorkspace(string json)
@@ -187,6 +196,12 @@ public class WorkspaceStoreTests : IDisposable
         Directory.CreateDirectory(_root);
         File.WriteAllText(_paths.WorkspaceFile, json);
     }
+
+    /// <summary>
+    /// The canvas these tests are about. Most of them write the v1 file shape on purpose, so
+    /// reading through the first tab is what proves the migration folded it into one.
+    /// </summary>
+    private static CanvasTab Canvas(Workspace workspace) => workspace.Tabs[0];
 
     [Fact]
     public void Save_StampsTheCurrentVersion()

@@ -22,7 +22,7 @@ public class MvpCoreTests : IDisposable
         var a = new TerminalNode { Title = "a" };
         var b = new TerminalNode { Title = "b" };
         var note = new NoteNode { Title = "nota" };
-        var workspace = new Workspace
+        var canvas = new CanvasTab
         {
             Nodes = { a, b, note },
             Connections =
@@ -32,9 +32,9 @@ public class MvpCoreTests : IDisposable
             }
         };
 
-        Assert.True(Authorization.CanAccess(workspace, a.Id, b.Id));
-        Assert.False(Authorization.CanAccess(workspace, b.Id, a.Id));
-        Assert.True(Authorization.CanAccess(workspace, b.Id, note.Id));
+        Assert.True(Authorization.CanAccess(canvas, a.Id, b.Id));
+        Assert.False(Authorization.CanAccess(canvas, b.Id, a.Id));
+        Assert.True(Authorization.CanAccess(canvas, b.Id, note.Id));
         Assert.False(CallChain.CanEnter(new[] { a.Id }, a.Id, 5));
     }
 

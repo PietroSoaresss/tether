@@ -12,17 +12,23 @@ public class CanvasTextStyleTests
     {
         var original = new Workspace
         {
-            CanvasItems =
+            Tabs =
             {
-                new CanvasItem
+                new CanvasTab
                 {
-                    Kind = CanvasItemKind.Text,
-                    Text = "arquitetura",
-                    Size = 24,
-                    Font = "serif",
-                    Bold = true,
-                    Italic = true,
-                    Align = "center"
+                    CanvasItems =
+                    {
+                        new CanvasItem
+                        {
+                            Kind = CanvasItemKind.Text,
+                            Text = "arquitetura",
+                            Size = 24,
+                            Font = "serif",
+                            Bold = true,
+                            Italic = true,
+                            Align = "center"
+                        }
+                    }
                 }
             }
         };
@@ -30,7 +36,7 @@ public class CanvasTextStyleTests
         string json = JsonSerializer.Serialize(original, TetherJson.Options);
         var loaded = JsonSerializer.Deserialize<Workspace>(json, TetherJson.Options)!;
 
-        var item = loaded.CanvasItems[0];
+        var item = loaded.Tabs[0].CanvasItems[0];
         Assert.Equal("serif", item.Font);
         Assert.True(item.Bold);
         Assert.True(item.Italic);
@@ -54,8 +60,7 @@ public class CanvasTextStyleTests
             }
             """;
 
-        var loaded = JsonSerializer.Deserialize<Workspace>(json, TetherJson.Options)!;
-        var item = loaded.CanvasItems[0];
+        var item = Assert.Single(Load(json).Tabs[0].CanvasItems);
 
         Assert.Equal("antigo", item.Text);
         Assert.Equal("ui", item.Font);
@@ -77,7 +82,7 @@ public class CanvasTextStyleTests
             }
             """;
 
-        var item = Assert.Single(Load(json).CanvasItems);
+        var item = Assert.Single(Load(json).Tabs[0].CanvasItems);
 
         Assert.Equal("ui", item.Font);
         Assert.Equal("left", item.Align);
@@ -105,7 +110,7 @@ public class CanvasTextStyleTests
             }
             """;
 
-        var kept = Load(json).CanvasItems;
+        var kept = Load(json).Tabs[0].CanvasItems;
 
         Assert.Equal(2, kept.Count);
         Assert.Equal("fica", kept[0].Text);

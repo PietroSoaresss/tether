@@ -2,17 +2,22 @@ using Orchestration.Core.Models;
 
 namespace Orchestration.Core.Graph;
 
+/// <summary>
+/// Cables authorize, and cables live on one canvas — so authorization is scoped to a canvas too.
+/// Two nodes on different tabs of the same project cannot reach each other, which is the same rule
+/// as before tabs existed, just now stated where it can be seen.
+/// </summary>
 public static class Authorization
 {
-    public static bool CanAccess(Workspace workspace, Guid from, Guid target)
+    public static bool CanAccess(CanvasTab canvas, Guid from, Guid target)
     {
         if (from == target) return false;
 
-        var targetNode = workspace.Nodes.FirstOrDefault(node => node.Id == target);
-        var fromNode = workspace.Nodes.FirstOrDefault(node => node.Id == from);
+        var targetNode = canvas.Nodes.FirstOrDefault(node => node.Id == target);
+        var fromNode = canvas.Nodes.FirstOrDefault(node => node.Id == from);
         if (targetNode is null || fromNode is null) return false;
 
-        return workspace.Connections.Any(connection =>
+        return canvas.Connections.Any(connection =>
             connection.SourceId == from && connection.TargetId == target ||
             connection.Bidirectional && connection.SourceId == target && connection.TargetId == from ||
             targetNode is NoteNode &&
@@ -23,15 +28,15 @@ public static class Authorization
              connection.SourceId == from && connection.TargetId == target));
     }
 
-    public static IReadOnlyList<NodeBase> Neighbors(Workspace workspace, Guid from) =>
-        workspace.Nodes.Where(node => CanAccess(workspace, from, node.Id)).ToList();
+    public static IReadOnlyList<NodeBase> Neighbors(CanvasTab canvas, Guid from) =>
+        canvas.Nodes.Where(node => CanAccess(canvas, from, node.Id)).ToList();
 
-    public static NodeBase? Resolve(Workspace workspace, string value)
+    public static NodeBase? Resolve(CanvasTab canvas, string value)
     {
         if (Guid.TryParse(value, out var id))
-            return workspace.Nodes.FirstOrDefault(node => node.Id == id);
+            return canvas.Nodes.FirstOrDefault(node => node.Id == id);
 
-        var matches = workspace.Nodes
+        var matches = canvas.Nodes
             .Where(node => string.Equals(node.Title, value, StringComparison.OrdinalIgnoreCase))
             .Take(2)
             .ToList();

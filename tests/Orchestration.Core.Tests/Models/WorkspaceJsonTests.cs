@@ -27,9 +27,9 @@ public class WorkspaceJsonTests
             ViewMode = NoteViewMode.Raw
         };
 
-        return new Workspace
+        var tab = new CanvasTab
         {
-            ProjectDirectory = @"C:\dev\projeto",
+            Name = "Canvas 1",
             Camera = new Camera { OffsetX = -40, OffsetY = 12, Zoom = 1.25 },
             Nodes = { terminal, note },
             Connections =
@@ -63,7 +63,16 @@ public class WorkspaceJsonTests
                 }
             }
         };
+
+        return new Workspace
+        {
+            ProjectDirectory = @"C:\dev\projeto",
+            Tabs = { tab },
+            ActiveTabId = tab.Id
+        };
     }
+
+    private static CanvasTab Canvas(Workspace workspace) => workspace.Tabs[0];
 
     [Fact]
     public void Workspace_RoundTripsBothNodeKinds()
@@ -73,8 +82,8 @@ public class WorkspaceJsonTests
         string json = JsonSerializer.Serialize(original, TetherJson.Options);
         var loaded = JsonSerializer.Deserialize<Workspace>(json, TetherJson.Options)!;
 
-        var terminal = Assert.IsType<TerminalNode>(loaded.Nodes[0]);
-        var note = Assert.IsType<NoteNode>(loaded.Nodes[1]);
+        var terminal = Assert.IsType<TerminalNode>(Canvas(loaded).Nodes[0]);
+        var note = Assert.IsType<NoteNode>(Canvas(loaded).Nodes[1]);
 
         Assert.Equal("powershell.exe -NoLogo -NoExit -Command claude", terminal.CommandLine);
         Assert.Equal(@"C:\dev\projeto", terminal.WorkingDirectory);
@@ -84,13 +93,13 @@ public class WorkspaceJsonTests
         Assert.Equal(@"C:\dev\projeto", note.WorkingDirectory);
         Assert.Equal(NoteViewMode.Raw, note.ViewMode);
         Assert.Equal(@"C:\dev\projeto", loaded.ProjectDirectory);
-        Assert.Equal(1.25, loaded.Camera.Zoom);
-        Assert.Equal(terminal.Id, loaded.Connections[0].SourceId);
-        Assert.False(loaded.Connections[0].Bidirectional);
-        Assert.Equal(.75, loaded.Connections[0].SourceAnchorX);
-        Assert.Equal(.8, loaded.Connections[0].TargetAnchorY);
-        Assert.Equal("arquitetura", loaded.CanvasItems[0].Text);
-        Assert.Equal(2, loaded.CanvasItems[1].Points.Count);
+        Assert.Equal(1.25, Canvas(loaded).Camera.Zoom);
+        Assert.Equal(terminal.Id, Canvas(loaded).Connections[0].SourceId);
+        Assert.False(Canvas(loaded).Connections[0].Bidirectional);
+        Assert.Equal(.75, Canvas(loaded).Connections[0].SourceAnchorX);
+        Assert.Equal(.8, Canvas(loaded).Connections[0].TargetAnchorY);
+        Assert.Equal("arquitetura", Canvas(loaded).CanvasItems[0].Text);
+        Assert.Equal(2, Canvas(loaded).CanvasItems[1].Points.Count);
     }
 
     [Fact]
