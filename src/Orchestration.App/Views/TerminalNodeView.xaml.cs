@@ -29,6 +29,7 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     private bool _selected;
     private ConPtySession? _session;
     private double _baseFontSize = 14;
+    private int _submitGapMs = 120;
     private double _lastZoom = 1;
     private string _fontFamily = "Cascadia Mono, Consolas, monospace";
     private string _kind = AgentKind.PowerShell.Id;
@@ -197,7 +198,9 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
         _session = session;
         if (!string.IsNullOrWhiteSpace(InitialInput))
         {
-            session.Write(InitialInput + "\r");
+            // Not awaited: Start runs on the UI thread from a page message, and the gap before
+            // the Enter is the point. Failures land in SendInput, which already swallows a dead pipe.
+            _ = SendPrompt(InitialInput);
             InitialInput = null;
         }
         ExitOverlay.Visibility = Visibility.Collapsed;
@@ -293,10 +296,11 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
         Web.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    public void ApplySettings(string family, double size)
+    public void ApplySettings(string family, double size, int submitGapMs)
     {
         _fontFamily = family;
         _baseFontSize = size;
+        _submitGapMs = submitGapMs;
         ApplyZoom(_lastZoom);
     }
 
@@ -320,6 +324,13 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
 
     /// <summary>Writes into the child's stdin. This is what a connected upstream terminal will call.</summary>
     public void SendInput(string text) => _session?.Write(text);
+
+    /// <summary>
+    /// Hands a delegated prompt to the agent and submits it. The Enter is a separate write on
+    /// purpose — see <see cref="PromptSubmission"/>, which owns that reasoning.
+    /// </summary>
+    public Task SendPrompt(string prompt) =>
+        PromptSubmission.Send(SendInput, prompt, TimeSpan.FromMilliseconds(_submitGapMs));
 
     private void OnRestart(object sender, RoutedEventArgs e)
     {

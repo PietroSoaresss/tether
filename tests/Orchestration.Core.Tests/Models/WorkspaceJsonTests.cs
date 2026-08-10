@@ -131,6 +131,7 @@ public class WorkspaceJsonTests
         Assert.Equal(1500, defaults.IdleMs);
         Assert.Equal(120_000, defaults.AskTimeoutMs);
         Assert.Equal(5, defaults.MaxCallDepth);
+        Assert.Equal(120, defaults.SubmitGapMs);
         Assert.True(defaults.SeedAgentInstructions);
 
         string json = JsonSerializer.Serialize(defaults, TetherJson.Options);

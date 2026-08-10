@@ -437,7 +437,8 @@ public sealed partial class MainWindow
                     ExtraEnvironment = NodeEnvironment(terminalModel.Id),
                     InitialInput = initialInput
                 };
-                view.ApplySettings(_settings.TerminalFontFamily, _settings.TerminalFontSize);
+                view.ApplySettings(
+                    _settings.TerminalFontFamily, _settings.TerminalFontSize, _settings.SubmitGapMs);
                 view.ApplyAccent(terminalModel.AccentColor);
                 view.Starting += () => PrimeAgent(terminalModel);
                 view.ZoomRequested += delta => ZoomAtNode(view, delta);

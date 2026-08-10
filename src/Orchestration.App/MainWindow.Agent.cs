@@ -164,7 +164,7 @@ public sealed partial class MainWindow
         view.ProcessExited += Exited;
         try
         {
-            view.SendInput(prompt + "\r");
+            await view.SendPrompt(prompt);
             TurnResult result = await detector.Completion;
             return result.Outcome switch
             {

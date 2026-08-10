@@ -38,6 +38,11 @@ public sealed partial class MainWindow
             Header = "Profundidade maxima",
             Minimum = 1, Maximum = 20, Value = _settings.MaxCallDepth
         };
+        var submitGap = new NumberBox
+        {
+            Header = "Pausa antes do Enter (ms)",
+            Minimum = 0, Maximum = 2000, Value = _settings.SubmitGapMs
+        };
         var primer = new ToggleSwitch
         {
             Header = "Atualizar instrucoes em AGENTS.md",
@@ -69,6 +74,7 @@ public sealed partial class MainWindow
         panel.Children.Add(idle);
         panel.Children.Add(timeout);
         panel.Children.Add(depth);
+        panel.Children.Add(submitGap);
         panel.Children.Add(primer);
         panel.Children.Add(Section("Atalhos"));
         foreach (var field in shortcuts.Values) panel.Children.Add(field);
@@ -100,6 +106,7 @@ public sealed partial class MainWindow
         _settings.IdleMs = (int)idle.Value;
         _settings.AskTimeoutMs = (int)timeout.Value;
         _settings.MaxCallDepth = (int)depth.Value;
+        _settings.SubmitGapMs = (int)submitGap.Value;
         _settings.SeedAgentInstructions = primer.IsOn;
         _settings.Shortcuts = gestures;
         _settingsStore.Save(_settings);
@@ -116,7 +123,8 @@ public sealed partial class MainWindow
         };
         foreach (var terminal in _terminalViews.Values)
         {
-            terminal.ApplySettings(_settings.TerminalFontFamily, _settings.TerminalFontSize);
+            terminal.ApplySettings(
+                _settings.TerminalFontFamily, _settings.TerminalFontSize, _settings.SubmitGapMs);
             terminal.ApplyZoom(_zoom);
         }
         ConfigureAccelerators();

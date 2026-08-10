@@ -21,6 +21,12 @@ public sealed class AppSettings
     /// <summary>How deep a chain of agents calling agents may go before it is refused.</summary>
     public int MaxCallDepth { get; set; } = 5;
 
+    /// <summary>
+    /// Pause between a delegated prompt and its Enter, in milliseconds. Tunable because it is a
+    /// real wait on a real machine — see <see cref="Terminal.PromptSubmission"/> for why it exists.
+    /// </summary>
+    public int SubmitGapMs { get; set; } = 120;
+
     /// <summary>Whether to seed the tether instruction block into AGENTS.md in a node's working directory.</summary>
     public bool SeedAgentInstructions { get; set; } = true;
 }
