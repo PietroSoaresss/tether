@@ -33,6 +33,28 @@ public sealed class Camera
     /// </summary>
     public static double FontSize(double baseSize, double zoom) => Math.Max(baseSize * zoom, 1);
 
+    /// <summary>
+    /// The scale a node's header paints at. Body type follows the zoom all the way down because the
+    /// terminal's column count depends on it; the header does not, and shrinking it there made a
+    /// 44 px bar with a 12 px title into a 20 px smear at 45% — the one thing that says which node
+    /// this is, gone in exactly the band where the body is already too small to read. Below 1× the
+    /// chrome holds device size, which is also what the collapsed card does.
+    /// </summary>
+    public static double ChromeScale(double zoom) => Math.Max(zoom, 1);
+
+    /// <summary>Below this a label is a smudge rather than a word.</summary>
+    public const double MinLabelSize = 12;
+
+    /// <summary>
+    /// Type the user wrote onto the canvas itself. Unlike a node body nothing measures columns
+    /// against it, so it is free to stop shrinking — and it has to: text written at 30 is 3 px at
+    /// the far end of the zoom range, and zooming out to find what you wrote is the whole reason
+    /// anyone zooms out. The floor never exceeds the size the user picked, or a 10 px label would
+    /// come back bigger than they set it at 100%.
+    /// </summary>
+    public static double LabelSize(double baseSize, double zoom) =>
+        Math.Max(baseSize * zoom, Math.Min(baseSize, MinLabelSize));
+
     public double OffsetX { get; set; }
     public double OffsetY { get; set; }
     public double Zoom { get; set; } = DefaultZoom;

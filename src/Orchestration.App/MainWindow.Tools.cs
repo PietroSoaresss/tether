@@ -574,8 +574,9 @@ public sealed partial class MainWindow
         {
             case CanvasItemKind.Text:
             {
-                // Same rule as a node: type is strictly proportional to the zoom, never clamped.
-                double size = Camera.FontSize(item.Size, _zoom);
+                // Not the node rule: a label owes nothing to a column count, so it floors instead
+                // of vanishing. See Camera.LabelSize.
+                double size = Camera.LabelSize(item.Size, _zoom);
                 var weight = item.Bold
                     ? Microsoft.UI.Text.FontWeights.Bold
                     : Microsoft.UI.Text.FontWeights.Normal;

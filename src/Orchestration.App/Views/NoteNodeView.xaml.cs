@@ -95,7 +95,9 @@ public sealed partial class NoteNodeView : UserControl, INodeView
         _collapsed = collapsed;
 
         // Header grows to fill the node so it stays the drag handle the canvas already hooked.
-        HeaderRow.Height = collapsed ? new GridLength(1, GridUnitType.Star) : new GridLength(HeaderHeight * _lastZoom);
+        HeaderRow.Height = collapsed
+            ? new GridLength(1, GridUnitType.Star)
+            : new GridLength(HeaderHeight * Camera.ChromeScale(_lastZoom));
         ContentRow.Height = collapsed ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         HeaderActions.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         SyncHeaderChrome();
@@ -105,18 +107,19 @@ public sealed partial class NoteNodeView : UserControl, INodeView
 
     /// <summary>
     /// The header is laid out at 1× and painted scaled, so its padding, badge and buttons track the
-    /// zoom without a FontSize per element. Collapsed it is a card rather than a scaled view, and
-    /// stays at device size — a card scaled to 20% would defeat the point of collapsing.
+    /// zoom without a FontSize per element. <see cref="Camera.ChromeScale"/> is what keeps it legible
+    /// on the way out; collapsing only ever happens under 1×, so the card's device size is that same
+    /// floor and needs no case of its own.
     /// </summary>
     private void SyncHeaderChrome()
     {
         if (_lastZoom <= 0) return;
-        double scale = _collapsed ? 1 : _lastZoom;
+        double scale = Camera.ChromeScale(_lastZoom);
         HeaderScale.ScaleX = HeaderScale.ScaleY = scale;
         // NaN is Auto: collapsed, the content stretches into the star-sized row as it always did.
         HeaderContent.Width = _collapsed ? double.NaN : Math.Max(HeaderBar.ActualWidth / scale, 0);
         HeaderContent.Height = _collapsed ? double.NaN : HeaderHeight;
-        if (!_collapsed) HeaderRow.Height = new GridLength(HeaderHeight * _lastZoom);
+        if (!_collapsed) HeaderRow.Height = new GridLength(HeaderHeight * scale);
     }
 
     private void OnTextChanged(object sender, TextChangedEventArgs e)

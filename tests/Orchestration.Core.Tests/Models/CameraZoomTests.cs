@@ -31,6 +31,39 @@ public class CameraZoomTests
         Assert.True(Camera.FontSize(14, Camera.MinZoom) > 0);
     }
 
+    /// <summary>
+    /// The header is the only thing that says which node this is, so it never shrinks past device
+    /// size — at 45% the old proportional chrome was a 20 px bar with a 5 px title.
+    /// </summary>
+    [Fact]
+    public void ChromeNeverPaintsSmallerThanDeviceSize()
+    {
+        for (double zoom = Camera.MinZoom; zoom <= 1; zoom += 0.01)
+            Assert.Equal(1, Camera.ChromeScale(zoom));
+
+        Assert.Equal(2, Camera.ChromeScale(2));  // and still grows with the zoom above 1×
+    }
+
+    /// <summary>
+    /// A label the user typed on the canvas stays readable all the way out — but never comes back
+    /// bigger than the size they picked, which is what a bare floor would do to a 10 px label.
+    /// </summary>
+    [Theory]
+    [InlineData(10)]  // the smallest the text tool offers
+    [InlineData(18)]  // default
+    [InlineData(96)]  // the largest
+    public void LabelStaysReadableAcrossTheWholeZoomRange(double baseSize)
+    {
+        for (double zoom = Camera.MinZoom; zoom <= Camera.MaxZoom; zoom += 0.01)
+        {
+            double size = Camera.LabelSize(baseSize, zoom);
+            Assert.True(size >= Math.Min(baseSize, Camera.MinLabelSize), $"illegible at {zoom}");
+            Assert.True(size >= baseSize * zoom, $"smaller than the canvas at {zoom}");
+        }
+
+        Assert.Equal(baseSize, Camera.LabelSize(baseSize, 1));
+    }
+
     [Fact]
     public void CollapseThresholdSitsInsideTheZoomRange()
     {
