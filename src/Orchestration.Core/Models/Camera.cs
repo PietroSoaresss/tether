@@ -33,15 +33,6 @@ public sealed class Camera
     /// </summary>
     public static double FontSize(double baseSize, double zoom) => Math.Max(baseSize * zoom, 1);
 
-    /// <summary>
-    /// The scale a node's header paints at. Body type follows the zoom all the way down because the
-    /// terminal's column count depends on it; the header does not, and shrinking it there made a
-    /// 44 px bar with a 12 px title into a 20 px smear at 45% — the one thing that says which node
-    /// this is, gone in exactly the band where the body is already too small to read. Below 1× the
-    /// chrome holds device size, which is also what the collapsed card does.
-    /// </summary>
-    public static double ChromeScale(double zoom) => Math.Max(zoom, 1);
-
     /// <summary>Below this a label is a smudge rather than a word.</summary>
     public const double MinLabelSize = 12;
 

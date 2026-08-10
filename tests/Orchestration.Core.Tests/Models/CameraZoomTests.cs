@@ -32,19 +32,6 @@ public class CameraZoomTests
     }
 
     /// <summary>
-    /// The header is the only thing that says which node this is, so it never shrinks past device
-    /// size — at 45% the old proportional chrome was a 20 px bar with a 5 px title.
-    /// </summary>
-    [Fact]
-    public void ChromeNeverPaintsSmallerThanDeviceSize()
-    {
-        for (double zoom = Camera.MinZoom; zoom <= 1; zoom += 0.01)
-            Assert.Equal(1, Camera.ChromeScale(zoom));
-
-        Assert.Equal(2, Camera.ChromeScale(2));  // and still grows with the zoom above 1×
-    }
-
-    /// <summary>
     /// A label the user typed on the canvas stays readable all the way out — but never comes back
     /// bigger than the size they picked, which is what a bare floor would do to a 10 px label.
     /// </summary>
