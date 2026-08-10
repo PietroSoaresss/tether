@@ -252,6 +252,9 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     /// The font tracks the same scale through <see cref="Camera.FontSize"/>, which is what keeps the
     /// pseudoconsole's column count constant across the zoom range — see the note there.
     /// The header does not participate: chrome is identity, fixed at device size in XAML.
+    /// Columns stay constant because width has no fixed subtraction, but rows do not: the body height
+    /// is node height times zoom minus the fixed header, so the page re-fits and resizes the pty as you
+    /// zoom — the price of chrome that no longer scales.
     /// </summary>
     public void ApplyZoom(double zoom)
     {

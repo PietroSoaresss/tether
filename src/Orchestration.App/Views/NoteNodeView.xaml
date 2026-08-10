@@ -20,9 +20,7 @@
 
                 <Grid x:Name="HeaderBar"
                       Background="{ThemeResource TetherNodeHeaderBrush}">
-                    <Grid x:Name="HeaderContent"
-                          Height="44"
-                          Padding="12,0"
+                    <Grid Padding="12,0"
                           ColumnSpacing="9">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
