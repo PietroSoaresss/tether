@@ -9,11 +9,10 @@ namespace Orchestration.App.Views;
 
 public sealed partial class NoteNodeView : UserControl, INodeView
 {
-    /// <summary>Header height in world units; on screen it is this times the zoom.</summary>
+    /// <summary>Header height in device pixels — fixed at every zoom.</summary>
     private const double HeaderHeight = 44;
 
     private double _baseFontSize = 13;
-    private double _lastZoom = 1;
     private bool _collapsed;
     private bool _selected;
     private bool _setting;
@@ -76,17 +75,16 @@ public sealed partial class NoteNodeView : UserControl, INodeView
     /// <summary>
     /// Text tracks the scale exactly. The old <c>Clamp(…, 12, 48)</c> froze it below zoom 0.92 and
     /// above 3.7, which is what made the note stop matching its own box; staying readable when the
-    /// node is tiny is the collapsed card's job, not a clamp's.
+    /// node is tiny is the collapsed card's job, not a clamp's. The header does not participate:
+    /// chrome is identity, fixed at device size in XAML.
     /// </summary>
     public void ApplyZoom(double zoom)
     {
-        _lastZoom = zoom;
         double size = Camera.FontSize(_baseFontSize, zoom);
         Editor.FontSize = size;
         Preview.FontSize = size;
         Editor.Padding = new Thickness(14 * zoom, 12 * zoom, 14 * zoom, 12 * zoom);
         PreviewScroller.Padding = Editor.Padding;
-        SyncHeaderChrome();
     }
 
     public void SetCollapsed(bool collapsed)
@@ -97,29 +95,9 @@ public sealed partial class NoteNodeView : UserControl, INodeView
         // Header grows to fill the node so it stays the drag handle the canvas already hooked.
         HeaderRow.Height = collapsed
             ? new GridLength(1, GridUnitType.Star)
-            : new GridLength(HeaderHeight * Camera.ChromeScale(_lastZoom));
+            : new GridLength(HeaderHeight);
         ContentRow.Height = collapsed ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         HeaderActions.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
-        SyncHeaderChrome();
-    }
-
-    private void OnHeaderSizeChanged(object sender, SizeChangedEventArgs e) => SyncHeaderChrome();
-
-    /// <summary>
-    /// The header is laid out at 1× and painted scaled, so its padding, badge and buttons track the
-    /// zoom without a FontSize per element. <see cref="Camera.ChromeScale"/> is what keeps it legible
-    /// on the way out; collapsing only ever happens under 1×, so the card's device size is that same
-    /// floor and needs no case of its own.
-    /// </summary>
-    private void SyncHeaderChrome()
-    {
-        if (_lastZoom <= 0) return;
-        double scale = Camera.ChromeScale(_lastZoom);
-        HeaderScale.ScaleX = HeaderScale.ScaleY = scale;
-        // NaN is Auto: collapsed, the content stretches into the star-sized row as it always did.
-        HeaderContent.Width = _collapsed ? double.NaN : Math.Max(HeaderBar.ActualWidth / scale, 0);
-        HeaderContent.Height = _collapsed ? double.NaN : HeaderHeight;
-        if (!_collapsed) HeaderRow.Height = new GridLength(HeaderHeight * scale);
     }
 
     private void OnTextChanged(object sender, TextChangedEventArgs e)

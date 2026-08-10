@@ -15,7 +15,7 @@ namespace Orchestration.App.Views;
 
 public sealed partial class TerminalNodeView : UserControl, INodeView
 {
-    /// <summary>Header height in world units; on screen it is this times the zoom.</summary>
+    /// <summary>Header height in device pixels — fixed at every zoom.</summary>
     private const double HeaderHeight = 44;
 
     // One browser process family for every terminal on the canvas.
@@ -251,11 +251,11 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     /// Zoom reaches the body as layout, never as a transform: the WebView2 surface is not scalable.
     /// The font tracks the same scale through <see cref="Camera.FontSize"/>, which is what keeps the
     /// pseudoconsole's column count constant across the zoom range — see the note there.
+    /// The header does not participate: chrome is identity, fixed at device size in XAML.
     /// </summary>
     public void ApplyZoom(double zoom)
     {
         _lastZoom = zoom;
-        SyncHeaderChrome();
         if (Web.CoreWebView2 is null || !_pageReady) return;
         Web.CoreWebView2.PostWebMessageAsString(
             JsonSerializer.Serialize(new
@@ -264,27 +264,6 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
                 size = Camera.FontSize(_baseFontSize, zoom),
                 family = _fontFamily
             }));
-    }
-
-    private void OnHeaderSizeChanged(object sender, SizeChangedEventArgs e) => SyncHeaderChrome();
-
-    /// <summary>
-    /// The header is laid out at 1× and painted scaled, so its padding, glyphs, badge and buttons
-    /// track the zoom without a FontSize per element. <see cref="Camera.ChromeScale"/> is what keeps
-    /// it legible on the way out; collapsing only ever happens under 1×, so the card's device size is
-    /// that same floor and needs no case of its own. The body keeps following the zoom exactly, so
-    /// the column count is untouched — a header that stops shrinking does cost the terminal a few
-    /// rows as you zoom out, which is the one reflow this trade accepts.
-    /// </summary>
-    private void SyncHeaderChrome()
-    {
-        if (_lastZoom <= 0) return;
-        double scale = Camera.ChromeScale(_lastZoom);
-        HeaderScale.ScaleX = HeaderScale.ScaleY = scale;
-        // NaN is Auto: collapsed, the content stretches into the star-sized row as it always did.
-        HeaderContent.Width = _collapsed ? double.NaN : Math.Max(HeaderBar.ActualWidth / scale, 0);
-        HeaderContent.Height = _collapsed ? double.NaN : HeaderHeight;
-        if (!_collapsed) HeaderRow.Height = new GridLength(HeaderHeight * scale);
     }
 
     private void ApplyKind()
@@ -303,13 +282,12 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
         // the canvas registered at creation time.
         HeaderRow.Height = collapsed
             ? new GridLength(1, GridUnitType.Star)
-            : new GridLength(HeaderHeight * Camera.ChromeScale(_lastZoom));
+            : new GridLength(HeaderHeight);
         ContentRow.Height = collapsed ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         HeaderActions.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         ProjectText.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         // A zero-height WebView2 still composites; hiding it is what actually buys the frame time.
         Web.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
-        SyncHeaderChrome();
     }
 
     public void ApplySettings(string family, double size)
