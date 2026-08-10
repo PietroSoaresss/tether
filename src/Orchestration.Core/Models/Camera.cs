@@ -17,11 +17,13 @@ public sealed class Camera
     public const double DefaultZoom = 1.0;
 
     /// <summary>
-    /// Below this a node stops being a scaled view and becomes a card: identity only, session still
-    /// running. This is what keeps PRODUCT.md principle 5 — a card is readable at any zoom, whereas
-    /// a terminal with its font clamped is a handful of garbled columns.
+    /// Below this a node stops rendering content and becomes a card — session still running. The
+    /// threshold sits where the miniature stops carrying information: under 15% a terminal's type
+    /// is below 2 px, pure noise, and hiding the WebView2s is what buys the frame time back on a
+    /// canvas with many of them. Identity at a distance comes from position, colour and zooming
+    /// back in, the way it does on any minimap — not from a card that refuses to shrink.
     /// </summary>
-    public const double CollapseZoom = 0.4;
+    public const double CollapseZoom = 0.15;
 
     /// <summary>
     /// The type size a node draws at. Strictly proportional, and that is a correctness requirement,
@@ -32,6 +34,14 @@ public sealed class Camera
     /// "a font size must be positive" rule that xterm and XAML both impose.
     /// </summary>
     public static double FontSize(double baseSize, double zoom) => Math.Max(baseSize * zoom, 1);
+
+    /// <summary>
+    /// The scale a node's header paints at. Above 1× it clamps: the bar and its letters hold their
+    /// standard size no matter how far in the user goes. Below 1× it tracks the zoom, so a
+    /// zoomed-out canvas is a field of faithful miniatures — full-size headers on shrunken bodies
+    /// left every node mostly bar, and density is the whole reason anyone zooms out.
+    /// </summary>
+    public static double ChromeScale(double zoom) => Math.Min(zoom, 1);
 
     /// <summary>Below this a label is a smudge rather than a word.</summary>
     public const double MinLabelSize = 12;

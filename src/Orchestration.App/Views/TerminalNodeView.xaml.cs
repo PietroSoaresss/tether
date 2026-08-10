@@ -15,7 +15,7 @@ namespace Orchestration.App.Views;
 
 public sealed partial class TerminalNodeView : UserControl, INodeView
 {
-    /// <summary>Header height in device pixels — fixed at every zoom.</summary>
+    /// <summary>Header height in world units; on screen it is this times <see cref="Camera.ChromeScale"/>.</summary>
     private const double HeaderHeight = 44;
 
     // One browser process family for every terminal on the canvas.
@@ -253,15 +253,15 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     /// <summary>
     /// Zoom reaches the body as layout, never as a transform: the WebView2 surface is not scalable.
     /// The font tracks the same scale through <see cref="Camera.FontSize"/>, which is what keeps the
-    /// pseudoconsole's column count constant across the zoom range — see the note there.
-    /// The header does not participate: chrome is identity, fixed at device size in XAML.
-    /// Columns stay constant because width has no fixed subtraction, but rows do not: the body height
-    /// is node height times zoom minus the fixed header, so the page re-fits and resizes the pty as you
-    /// zoom — the price of chrome that no longer scales.
+    /// pseudoconsole's column count constant across the zoom range — see the note there. The header
+    /// paints at <see cref="Camera.ChromeScale"/>: proportional below 1×, so rows are constant there
+    /// too; above 1× it clamps at device size, and the pty re-fits its rows as the body absorbs the
+    /// difference — the one reflow the standard-size chrome accepts.
     /// </summary>
     public void ApplyZoom(double zoom)
     {
         _lastZoom = zoom;
+        SyncHeaderChrome();
         if (Web.CoreWebView2 is null || !_pageReady) return;
         Web.CoreWebView2.PostWebMessageAsString(
             JsonSerializer.Serialize(new
@@ -270,6 +270,24 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
                 size = Camera.FontSize(_baseFontSize, zoom),
                 family = _fontFamily
             }));
+    }
+
+    private void OnHeaderSizeChanged(object sender, SizeChangedEventArgs e) => SyncHeaderChrome();
+
+    /// <summary>
+    /// The header is laid out at 1× and painted scaled, so its padding, glyphs, badge and buttons
+    /// track <see cref="Camera.ChromeScale"/> without a FontSize per element. The content box is the
+    /// bar's device size divided back into world units — collapsed, that is the whole card, which is
+    /// how the miniature keeps its label centred.
+    /// </summary>
+    private void SyncHeaderChrome()
+    {
+        if (_lastZoom <= 0) return;
+        double scale = Camera.ChromeScale(_lastZoom);
+        HeaderScale.ScaleX = HeaderScale.ScaleY = scale;
+        HeaderContent.Width = Math.Max(HeaderBar.ActualWidth / scale, 0);
+        HeaderContent.Height = _collapsed ? Math.Max(HeaderBar.ActualHeight / scale, 0) : HeaderHeight;
+        if (!_collapsed) HeaderRow.Height = new GridLength(HeaderHeight * scale);
     }
 
     private void ApplyKind()
@@ -288,12 +306,13 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
         // the canvas registered at creation time.
         HeaderRow.Height = collapsed
             ? new GridLength(1, GridUnitType.Star)
-            : new GridLength(HeaderHeight);
+            : new GridLength(HeaderHeight * Camera.ChromeScale(_lastZoom));
         ContentRow.Height = collapsed ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         HeaderActions.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         ProjectText.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         // A zero-height WebView2 still composites; hiding it is what actually buys the frame time.
         Web.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+        SyncHeaderChrome();
     }
 
     public void ApplySettings(string family, double size, int submitGapMs)

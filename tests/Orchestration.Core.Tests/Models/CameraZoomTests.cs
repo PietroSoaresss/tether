@@ -32,6 +32,21 @@ public class CameraZoomTests
     }
 
     /// <summary>
+    /// The two zoom complaints this settles, one per direction: zooming in must not grow the bar
+    /// and its letters past their standard size, and zooming out must shrink the whole node
+    /// proportionally — a header that held device size left every miniature mostly bar.
+    /// </summary>
+    [Fact]
+    public void ChromeTracksTheZoomOutAndClampsOnTheWayIn()
+    {
+        for (double zoom = Camera.MinZoom; zoom <= 1; zoom += 0.01)
+            Assert.Equal(zoom, Camera.ChromeScale(zoom));
+
+        Assert.Equal(1, Camera.ChromeScale(1.5));
+        Assert.Equal(1, Camera.ChromeScale(Camera.MaxZoom));
+    }
+
+    /// <summary>
     /// A label the user typed on the canvas stays readable all the way out — but never comes back
     /// bigger than the size they picked, which is what a bare floor would do to a 10 px label.
     /// </summary>

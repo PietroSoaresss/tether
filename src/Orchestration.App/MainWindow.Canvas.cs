@@ -19,9 +19,6 @@ public sealed partial class MainWindow
 
     private const double CollapseZoom = Camera.CollapseZoom;
 
-    /// <summary>Smallest a collapsed card is allowed to get on screen. See <see cref="PlaceNode"/>.</summary>
-    private const double MinCardWidth = 208, MinCardHeight = 44;
-
     private double _zoom = 1.0, _offsetX, _offsetY;
     private Point _panStart;
     private bool _panning;
@@ -34,14 +31,13 @@ public sealed partial class MainWindow
     /// </summary>
     private void PlaceNode(CanvasNode node)
     {
+        // Strictly proportional, cards included. The old on-screen floor (208×44) meant zooming out
+        // stopped adding density at exactly the moment density was the point: cards froze at card
+        // size, piled up and overlapped. A miniature that shrinks honestly is the map.
         Canvas.SetLeft(node.View, node.X * _zoom + _offsetX);
         Canvas.SetTop(node.View, node.Y * _zoom + _offsetY);
-        // A collapsed card is a label, not a scaled node, so it stops shrinking with the canvas:
-        // at 15% a 720-wide node is 108 px, which clips away the very name the card exists to show.
-        // The floor is the badge plus a few characters of title; longer titles still ellipsize.
-        bool collapsed = _zoom < CollapseZoom;
-        node.View.Width = collapsed ? Math.Max(node.Width * _zoom, MinCardWidth) : node.Width * _zoom;
-        node.View.Height = collapsed ? Math.Max(node.Height * _zoom, MinCardHeight) : node.Height * _zoom;
+        node.View.Width = node.Width * _zoom;
+        node.View.Height = node.Height * _zoom;
         RenderWires();
     }
 
