@@ -20,7 +20,7 @@ public sealed partial class MainWindow
     private const double DragThreshold = 12;
 
     private static readonly string[] ShapeTools = { "arrow", "rect", "ellipse", "diamond" };
-    private static readonly string[] PlacementTools = { "place-terminal", "place-note" };
+    private static readonly string[] PlacementTools = { "place-terminal", "place-note", "place-browser" };
 
     private readonly Dictionary<Guid, FrameworkElement> _annotationViews = new();
     private string _canvasTool = "select";
@@ -110,6 +110,7 @@ public sealed partial class MainWindow
                     "diamond" => "Losango",
                     "place-terminal" => "Terminal: clique ou arraste",
                     "place-note" => "Nota: clique ou arraste",
+                    "place-browser" => "Navegador: clique ou arraste",
                     _ => "Cor"
                 };
 
@@ -385,6 +386,11 @@ public sealed partial class MainWindow
             {
                 if (dragged) CreateTerminal(x, y, Math.Max(width, 240), Math.Max(height, 160));
                 else CreateTerminal(start.X, start.Y);
+            }
+            else if (tool == "place-browser")
+            {
+                if (dragged) CreateBrowser(x, y, Math.Max(width, 240), Math.Max(height, 160));
+                else CreateBrowser(start.X, start.Y);
             }
             else
             {

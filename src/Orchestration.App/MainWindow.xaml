@@ -69,6 +69,13 @@
                             <TextBlock Text="Nota" />
                         </StackPanel>
                     </Button>
+                    <Button Style="{StaticResource TetherToolbarButtonStyle}"
+                            Click="OnNewBrowser">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <FontIcon Glyph="&#xE774;" FontSize="14" />
+                            <TextBlock Text="Navegador" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2"
@@ -220,6 +227,11 @@
                                     Click="OnNewNote"
                                     ToolTipService.ToolTip="Nova nota">
                                 <FontIcon Glyph="&#xE70B;" FontSize="14" />
+                            </Button>
+                            <Button Style="{StaticResource TetherNodeActionButtonStyle}"
+                                    Click="OnNewBrowser"
+                                    ToolTipService.ToolTip="Novo navegador">
+                                <FontIcon Glyph="&#xE774;" FontSize="14" />
                             </Button>
                             <ToggleButton x:Name="TextCanvasTool"
                                           Tag="text"

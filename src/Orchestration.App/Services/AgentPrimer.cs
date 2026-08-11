@@ -48,5 +48,6 @@ public static class AgentPrimer
         File.Move(temporary, path, overwrite: true);
     }
 
-    private static string Kind(NodeBase node) => node is TerminalNode ? "terminal" : "note";
+    private static string Kind(NodeBase node) =>
+        node switch { TerminalNode => "terminal", BrowserNode => "browser", _ => "note" };
 }

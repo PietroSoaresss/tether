@@ -419,6 +419,17 @@ public sealed partial class MainWindow
         RefreshFileTree();
     }
 
+    private void CreateBrowser(double x, double y, double width = 720, double height = 480)
+    {
+        Materialize(new BrowserNode
+        {
+            Title = "navegador",
+            X = x, Y = y, Width = width, Height = height
+        });
+    }
+
+    private void OnNewBrowser(object sender, RoutedEventArgs e) => ArmPlacement("place-browser");
+
     /// <summary>Builds the view for a model. The one place that knows model kind maps to view kind.</summary>
     private void Materialize(NodeBase model, string? initialInput = null, CanvasTab? tab = null)
     {
@@ -451,6 +462,23 @@ public sealed partial class MainWindow
             {
                 var view = new NoteNodeView();
                 BindNote(view, noteModel);
+                view.CloseRequested += RemoveNode;
+                AddNode(view, view, model, tab);
+                break;
+            }
+            case BrowserNode browserModel:
+            {
+                var view = new BrowserNodeView
+                {
+                    Title = browserModel.Title,
+                    Url = browserModel.Url
+                };
+                view.UrlChanged += changed =>
+                {
+                    browserModel.Url = changed.Url;
+                    _autosave.Touch();
+                };
+                view.ZoomRequested += delta => ZoomAtNode(view, delta);
                 view.CloseRequested += RemoveNode;
                 AddNode(view, view, model, tab);
                 break;

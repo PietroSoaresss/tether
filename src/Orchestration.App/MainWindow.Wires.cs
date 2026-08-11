@@ -269,6 +269,12 @@ public sealed partial class MainWindow
             details.Text = note.FileName;
             panel.Children.Add(details);
         }
+        else if (entry.Model is BrowserNode browser)
+        {
+            details.Header = "URL";
+            details.Text = browser.Url;
+            panel.Children.Add(details);
+        }
 
         var dialog = new ContentDialog
         {
@@ -305,8 +311,14 @@ public sealed partial class MainWindow
                 ShowRecoveryNotice(e.Message);
             }
         }
+        else if (entry.Model is BrowserNode browserModel)
+        {
+            browserModel.Url = BrowserNode.CompleteUrl(details.Text);
+            ((Views.BrowserNodeView)entry.Node).Url = browserModel.Url;
+        }
 
         if (entry.Node is Views.NoteNodeView noteView) noteView.Title = entry.Model.Title;
+        if (entry.Node is Views.BrowserNodeView bview) bview.Title = entry.Model.Title;
         _autosave.Touch();
     }
 
