@@ -126,9 +126,25 @@ public sealed partial class BrowserNodeView : UserControl, INodeView
         e.Handled = true;
     }
 
-    private void OnBack(object sender, RoutedEventArgs e) { if (Web.CanGoBack) Web.GoBack(); }
-    private void OnForward(object sender, RoutedEventArgs e) { if (Web.CanGoForward) Web.GoForward(); }
-    private void OnReload(object sender, RoutedEventArgs e) => Web.Reload();
+    /// <summary>
+    /// The nav row is visible and clickable while <see cref="OnLoaded"/> is still awaiting
+    /// <c>EnsureCoreWebView2Async</c>, before <c>Web.CoreWebView2</c> exists, so these three guard the
+    /// same way the rest of this file does.
+    /// </summary>
+    private void OnBack(object sender, RoutedEventArgs e)
+    {
+        if (Web.CoreWebView2 is not null && Web.CanGoBack) Web.GoBack();
+    }
+
+    private void OnForward(object sender, RoutedEventArgs e)
+    {
+        if (Web.CoreWebView2 is not null && Web.CanGoForward) Web.GoForward();
+    }
+
+    private void OnReload(object sender, RoutedEventArgs e)
+    {
+        if (Web.CoreWebView2 is not null) Web.Reload();
+    }
 
     /// <summary>
     /// The body cannot scale as a surface (WebView2 is not composed by XAML), so the page content
