@@ -18,10 +18,6 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
     /// <summary>Header height in world units; on screen it is this times <see cref="Camera.ChromeScale"/>.</summary>
     private const double HeaderHeight = 44;
 
-    // One browser process family for every terminal on the canvas.
-    private static CoreWebView2Environment? _sharedEnvironment;
-    private static readonly SemaphoreSlim EnvironmentLock = new(1, 1);
-
     private readonly DispatcherQueue _dispatcher;
     private readonly List<byte> _pendingOutput = new();
     private bool _flushScheduled;
@@ -96,22 +92,7 @@ public sealed partial class TerminalNodeView : UserControl, INodeView
         ProjectText.Text = string.IsNullOrWhiteSpace(folder) ? directory : folder;
         ToolTipService.SetToolTip(ProjectText, directory);
 
-        await EnvironmentLock.WaitAsync();
-        try
-        {
-            _sharedEnvironment ??= await CoreWebView2Environment.CreateWithOptionsAsync(
-                browserExecutableFolder: null,
-                userDataFolder: Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Orchestration", "WebView2"),
-                options: new CoreWebView2EnvironmentOptions());
-        }
-        finally
-        {
-            EnvironmentLock.Release();
-        }
-
-        await Web.EnsureCoreWebView2Async(_sharedEnvironment);
+        await Web.EnsureCoreWebView2Async(await Services.TetherWebView.SharedEnvironmentAsync());
 
         var core = Web.CoreWebView2;
         core.Settings.AreDefaultContextMenusEnabled = false;
