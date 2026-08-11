@@ -5,6 +5,7 @@ namespace Orchestration.Core.Models;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(TerminalNode), "terminal")]
 [JsonDerivedType(typeof(NoteNode), "note")]
+[JsonDerivedType(typeof(BrowserNode), "browser")]
 public abstract class NodeBase
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -43,4 +44,25 @@ public sealed class NoteNode : NodeBase
     public string FileName { get; set; } = "";
 
     public NoteViewMode ViewMode { get; set; } = NoteViewMode.Preview;
+}
+
+public sealed class BrowserNode : NodeBase
+{
+    /// <summary>Last address navigated to; written back on every navigation so reload restores it.</summary>
+    public string Url { get; set; } = "";
+
+    /// <summary>
+    /// What the user typed in the address box, made navigable. Local hosts get http because dev
+    /// servers speak http, and the address box is exactly where "localhost:3000" gets typed;
+    /// everything else without a scheme gets https. No search-engine fallback: this is a preview
+    /// pane, not a browser product.
+    /// </summary>
+    public static string CompleteUrl(string text)
+    {
+        string trimmed = text.Trim();
+        if (trimmed.Length == 0 || trimmed.Contains("://")) return trimmed;
+        bool local = trimmed.StartsWith("localhost", StringComparison.OrdinalIgnoreCase) ||
+                     trimmed.StartsWith("127.");
+        return (local ? "http://" : "https://") + trimmed;
+    }
 }

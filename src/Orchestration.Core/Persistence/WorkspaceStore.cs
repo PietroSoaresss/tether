@@ -140,6 +140,10 @@ public sealed class WorkspaceStore
                 terminal.Kind = AgentKind.FromCommandLine(terminal.CommandLine).Id;
         }
 
+        // Same repair the other node kinds get: a hand-edited null must not NRE downstream.
+        foreach (var browser in tab.Nodes.OfType<BrowserNode>())
+            browser.Url ??= "";
+
         // A cable whose other end is not on this canvas can never be drawn or selected, so it would
         // only ever sit in the file. Nothing in the UI can create one; a hand edit can.
         var live = tab.Nodes.Select(node => node.Id).ToHashSet();

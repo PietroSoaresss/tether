@@ -26,12 +26,18 @@ public class WorkspaceJsonTests
             FileName = "briefing.md",
             ViewMode = NoteViewMode.Raw
         };
+        var browser = new BrowserNode
+        {
+            Title = "preview",
+            X = 800, Y = 300, Width = 720, Height = 480,
+            Url = "http://localhost:3000"
+        };
 
         var tab = new CanvasTab
         {
             Name = "Canvas 1",
             Camera = new Camera { OffsetX = -40, OffsetY = 12, Zoom = 1.25 },
-            Nodes = { terminal, note },
+            Nodes = { terminal, note, browser },
             Connections =
             {
                 new Connection
@@ -92,6 +98,8 @@ public class WorkspaceJsonTests
         Assert.Equal("briefing.md", note.FileName);
         Assert.Equal(@"C:\dev\projeto", note.WorkingDirectory);
         Assert.Equal(NoteViewMode.Raw, note.ViewMode);
+        var browser = Assert.IsType<BrowserNode>(Canvas(loaded).Nodes[2]);
+        Assert.Equal("http://localhost:3000", browser.Url);
         Assert.Equal(@"C:\dev\projeto", loaded.ProjectDirectory);
         Assert.Equal(1.25, Canvas(loaded).Camera.Zoom);
         Assert.Equal(terminal.Id, Canvas(loaded).Connections[0].SourceId);
