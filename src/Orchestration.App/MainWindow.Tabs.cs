@@ -177,6 +177,7 @@ public sealed partial class MainWindow
         foreach (var node in _nodes.Where(node => ReferenceEquals(node.Tab, tab)).ToList())
         {
             if (node.Node is TerminalNodeView terminal) terminal.DisposeSession();
+            if (node.Node is BrowserNodeView browser) browser.CloseWeb();
             _nodes.Remove(node);
             _noteViews.Remove(node.Model.Id);
             _terminalViews.Remove(node.Model.Id);

@@ -3,6 +3,8 @@ using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.Web.WebView2.Core;
 using Orchestration.Core.Models;
 using Windows.System;
 
@@ -73,36 +75,72 @@ public sealed partial class BrowserNodeView : UserControl, INodeView
         core.Settings.IsStatusBarEnabled = false;
         // Chromium's own ctrl+wheel zoom would shadow the canvas gesture; the forwarder owns it.
         core.Settings.IsZoomControlEnabled = false;
+        // This is a preview pane, not a browser product: the app owns one WebView2 user data folder
+        // it never cleans and gives no UI to inspect or clear, so it must not collect the addresses
+        // and passwords a browser node's remote pages would otherwise prompt to save into it.
+        core.Settings.IsGeneralAutofillEnabled = false;
+        core.Settings.IsPasswordAutosaveEnabled = false;
         await core.AddScriptToExecuteOnDocumentCreatedAsync(WheelForwarder);
 
         core.WebMessageReceived += OnWebMessage;
         core.SourceChanged += (_, _) =>
         {
-            UrlBox.Text = core.Source;
+            // A redirect or an SPA pushState can land mid-edit; UrlChanged still fires so the model
+            // tracks the real address, but the box itself is left alone while the user is typing.
+            if (UrlBox.FocusState == FocusState.Unfocused) UrlBox.Text = core.Source;
             UrlChanged?.Invoke(this);
         };
-        // CSS zoom does not survive a navigation, so every landing reapplies the current scale.
+        // CSS zoom does not survive a navigation, so every landing reapplies the current scale. Both
+        // events are hooked: NavigationCompleted only fires once the whole load settles, so without
+        // DOMContentLoaded every navigation paints at 1x and snaps, and a page that never fully
+        // completes (a streaming response, a dev server holding the connection) would never zoom at
+        // all. DOMContentLoaded fires before first paint, once documentElement exists.
+        core.DOMContentLoaded += (_, _) => ApplyPageZoom();
         core.NavigationCompleted += (_, _) => ApplyPageZoom();
-        // A popup that opened a real window would live outside the canvas; keep it in the node.
+        // A popup that opened a real window would live outside the canvas; keep it in the node. The
+        // host-initiated navigation this performs is not subject to the block WebView2 places on
+        // web-content-initiated file:// navigations, so window.open('file:///...') is restricted to
+        // http/https here rather than handed straight to Navigate.
         core.NewWindowRequested += (_, args) =>
         {
             args.Handled = true;
-            core.Navigate(args.Uri);
+            if (Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                core.Navigate(args.Uri);
         };
+
+        // The address box lives inside the node's drag handle, so the canvas would otherwise read a
+        // click here as the start of a drag and a double-click as "edit this node".
+        UrlBox.PointerPressed += (_, e) => e.Handled = true;
+        UrlBox.DoubleTapped += (_, e) => e.Handled = true;
 
         if (_url.Length > 0) Navigate(_url);
     }
 
-    private void OnWebMessage(
-        Microsoft.Web.WebView2.Core.CoreWebView2 sender,
-        Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs args)
+    /// <summary>
+    /// <see cref="TerminalNodeView"/> can parse its messages with the throwing accessors because its
+    /// only possible sender is the app's own bundled term.local page. This view's sender is whatever
+    /// site the user navigated to, and <c>window.chrome.webview</c> is reachable from every document
+    /// a WebView2 loads — not just the one that got the wheel-forwarder script — so any remote page
+    /// can call postMessage with an arbitrary payload. Nothing below may assume that payload's shape.
+    /// </summary>
+    private void OnWebMessage(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
     {
-        JsonElement message;
-        try { message = JsonDocument.Parse(args.TryGetWebMessageAsString()).RootElement; }
-        catch (JsonException) { return; }
-
-        if (message.TryGetProperty("t", out var kind) && kind.GetString() == "zoom")
-            ZoomRequested?.Invoke(message.GetProperty("d").GetDouble());
+        try
+        {
+            using var document = JsonDocument.Parse(args.TryGetWebMessageAsString());
+            var message = document.RootElement;
+            if (message.TryGetProperty("t", out var kind) && kind.GetString() == "zoom" &&
+                message.TryGetProperty("d", out var delta) && delta.TryGetDouble(out double value))
+                ZoomRequested?.Invoke(value);
+        }
+        catch (Exception e) when (
+            e is JsonException or InvalidOperationException or KeyNotFoundException or ArgumentException)
+        {
+            // A hostile or merely buggy page can post anything on this channel — a non-string
+            // message, a JSON scalar instead of an object, a "d" that is missing or not a number.
+            // None of that may throw out of a UI-thread event handler.
+        }
     }
 
     public void Navigate(string text)
@@ -112,10 +150,13 @@ public sealed partial class BrowserNodeView : UserControl, INodeView
         try
         {
             Web.CoreWebView2.Navigate(url);
+            UrlBox.ClearValue(Control.BorderBrushProperty);
         }
         catch (ArgumentException)
         {
-            // Malformed address: stay on the current page, the box still shows what was typed.
+            // Malformed address: stay on the current page, but say so — a control that silently
+            // ignores the input is still wrong even though CompleteUrl now rejects far less of it.
+            UrlBox.BorderBrush = (Brush)Application.Current.Resources["TetherDangerBrush"];
         }
     }
 
@@ -171,8 +212,9 @@ public sealed partial class BrowserNodeView : UserControl, INodeView
     /// <summary>
     /// The header is laid out at 1× and painted scaled, so its padding, badge and buttons track
     /// <see cref="Camera.ChromeScale"/> without a FontSize per element. The content box is the bar's
-    /// device size divided back into world units — collapsed, that is the whole card, which is how
-    /// the miniature keeps its label centred.
+    /// device size divided back into world units — collapsed, that is the whole card. Unlike the
+    /// sibling views, this header is two fixed rows rather than one row of vertically-centred
+    /// children, so nothing here centres a label.
     /// </summary>
     private void SyncHeaderChrome()
     {
@@ -202,6 +244,13 @@ public sealed partial class BrowserNodeView : UserControl, INodeView
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => CloseRequested?.Invoke(this);
+
+    /// <summary>
+    /// Stops the page. Unlike the terminal's local xterm document, a browser node's page is remote
+    /// code that keeps running — timers, media, sockets — until the control is finalized, which in a
+    /// long session may be never.
+    /// </summary>
+    public void CloseWeb() => Web.Close();
 
     public void SetSelected(bool selected)
     {

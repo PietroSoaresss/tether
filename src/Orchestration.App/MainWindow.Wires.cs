@@ -230,8 +230,12 @@ public sealed partial class MainWindow
         {
             if (!resizing) return;
             Point now = e.GetCurrentPoint(Viewport).Position;
-            double minWidth = entry.Model is TerminalNode ? 240 : 160;
-            double minHeight = entry.Model is TerminalNode ? 160 : 100;
+            // A browser node is placed at 240x160 minimum too (see MainWindow.Tools.cs); the resize
+            // floor has to agree, or a header this tall (76 units) could be dragged down to leave
+            // almost nothing for the page.
+            bool chromeHeavy = entry.Model is TerminalNode or BrowserNode;
+            double minWidth = chromeHeavy ? 240 : 160;
+            double minHeight = chromeHeavy ? 160 : 100;
             entry.Width = Math.Max(minWidth, entry.Width + (now.X - last.X) / _zoom);
             entry.Height = Math.Max(minHeight, entry.Height + (now.Y - last.Y) / _zoom);
             last = now;
@@ -313,12 +317,18 @@ public sealed partial class MainWindow
         }
         else if (entry.Model is BrowserNode browserModel)
         {
-            browserModel.Url = BrowserNode.CompleteUrl(details.Text);
-            ((Views.BrowserNodeView)entry.Node).Url = browserModel.Url;
+            string completed = BrowserNode.CompleteUrl(details.Text);
+            // The Url setter navigates, and renaming a node by double-clicking its header must not
+            // throw away scroll position and form state the way restarting a terminal does not.
+            if (completed != browserModel.Url)
+            {
+                browserModel.Url = completed;
+                ((Views.BrowserNodeView)entry.Node).Url = completed;
+            }
         }
 
         if (entry.Node is Views.NoteNodeView noteView) noteView.Title = entry.Model.Title;
-        if (entry.Node is Views.BrowserNodeView bview) bview.Title = entry.Model.Title;
+        if (entry.Node is Views.BrowserNodeView browserView) browserView.Title = entry.Model.Title;
         _autosave.Touch();
     }
 

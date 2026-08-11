@@ -173,6 +173,7 @@ public sealed partial class MainWindow
             var selected = _selectedNode;
             SelectNode(null);
             if (selected.Node is Views.TerminalNodeView terminal) terminal.DisposeSession();
+            if (selected.Node is Views.BrowserNodeView browser) browser.CloseWeb();
             RemoveNode(selected.View);
         }
     }

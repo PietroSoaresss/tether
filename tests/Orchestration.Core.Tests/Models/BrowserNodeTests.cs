@@ -17,8 +17,23 @@ public class BrowserNodeTests
     [InlineData("http://interno:5000", "http://interno:5000")]
     [InlineData("  example.com  ", "https://example.com")]
     [InlineData("   ", "")]
+    // A "://" anywhere in the string used to read as "already schemed", so a URL-valued query
+    // parameter defeated the check and this came back with no scheme at all.
+    [InlineData("example.com?next=http://x", "https://example.com?next=http://x")]
     public void CompleteUrl_FillsTheSchemeTheUserDidNotType(string typed, string expected)
     {
         Assert.Equal(expected, BrowserNode.CompleteUrl(typed));
+    }
+
+    /// <summary>
+    /// The wire name is a contract: agents read it from `tether list` and from the seeded
+    /// AGENTS.md, so pinning it here catches an accidental rename that would break every consumer.
+    /// </summary>
+    [Fact]
+    public void Label_ReturnsTheWireNameForEveryNodeKind()
+    {
+        Assert.Equal("terminal", NodeKinds.Label(new TerminalNode()));
+        Assert.Equal("note", NodeKinds.Label(new NoteNode()));
+        Assert.Equal("browser", NodeKinds.Label(new BrowserNode()));
     }
 }

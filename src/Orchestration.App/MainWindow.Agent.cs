@@ -40,7 +40,7 @@ public sealed partial class MainWindow
                 return TetherResponse.Success(string.Join(
                     Environment.NewLine,
                     Authorization.Neighbors(TabOf(request.From), request.From)
-                        .Select(node => $"{node.Id}  {NodeKindLabel(node)}  {node.Title}")));
+                        .Select(node => $"{node.Id}  {NodeKinds.Label(node)}  {node.Title}")));
 
             case "note-show":
             case "note-edit":
@@ -56,9 +56,6 @@ public sealed partial class MainWindow
                 return TetherResponse.Failure("unknown command");
         }
     }
-
-    private static string NodeKindLabel(NodeBase node) =>
-        node switch { TerminalNode => "terminal", BrowserNode => "browser", _ => "note" };
 
     private TetherResponse HandleSpawn(TetherRequest request)
     {

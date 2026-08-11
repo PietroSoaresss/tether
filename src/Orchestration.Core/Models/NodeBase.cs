@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace Orchestration.Core.Models;
 
@@ -46,23 +47,40 @@ public sealed class NoteNode : NodeBase
     public NoteViewMode ViewMode { get; set; } = NoteViewMode.Preview;
 }
 
-public sealed class BrowserNode : NodeBase
+public sealed partial class BrowserNode : NodeBase
 {
     /// <summary>Last address navigated to; written back on every navigation so reload restores it.</summary>
     public string Url { get; set; } = "";
 
     /// <summary>
-    /// What the user typed in the address box, made navigable. Local hosts get http because dev
-    /// servers speak http, and the address box is exactly where "localhost:3000" gets typed;
-    /// everything else without a scheme gets https. No search-engine fallback: this is a preview
-    /// pane, not a browser product.
+    /// What the user typed in the address box, made navigable. Already-schemed input is passed
+    /// through unchanged — checked with a leading-scheme match rather than <c>Contains("://")</c>,
+    /// because a bare substring test also matches a scheme buried in a query parameter (as in
+    /// "example.com?next=http://x") and would wrongly leave that text unschemed. Local hosts get
+    /// http because dev servers speak http, and the address box is exactly where "localhost:3000"
+    /// gets typed; everything else without a leading scheme gets https. No search-engine fallback:
+    /// this is a preview pane, not a browser product.
     /// </summary>
     public static string CompleteUrl(string text)
     {
         string trimmed = text.Trim();
-        if (trimmed.Length == 0 || trimmed.Contains("://")) return trimmed;
+        if (trimmed.Length == 0 || SchemePrefix().IsMatch(trimmed)) return trimmed;
         bool local = trimmed.StartsWith("localhost", StringComparison.OrdinalIgnoreCase) ||
                      trimmed.StartsWith("127.");
         return (local ? "http://" : "https://") + trimmed;
     }
+
+    [GeneratedRegex(@"^[a-zA-Z][a-zA-Z0-9+.\-]*://")]
+    private static partial Regex SchemePrefix();
+}
+
+public static class NodeKinds
+{
+    /// <summary>
+    /// The wire name for a node kind. Agents read this from `tether list` and from the seeded
+    /// AGENTS.md, so it is a contract rather than a display string, and it lives beside the JSON
+    /// discriminators that spell the same vocabulary.
+    /// </summary>
+    public static string Label(NodeBase node) =>
+        node switch { TerminalNode => "terminal", BrowserNode => "browser", _ => "note" };
 }

@@ -81,7 +81,7 @@ public class WorkspaceJsonTests
     private static CanvasTab Canvas(Workspace workspace) => workspace.Tabs[0];
 
     [Fact]
-    public void Workspace_RoundTripsBothNodeKinds()
+    public void Workspace_RoundTripsEveryNodeKind()
     {
         var original = SampleWorkspace();
 
@@ -117,6 +117,7 @@ public class WorkspaceJsonTests
 
         Assert.Contains("\"$type\": \"terminal\"", json);
         Assert.Contains("\"$type\": \"note\"", json);
+        Assert.Contains("\"$type\": \"browser\"", json);
         // Enums as names, not integers: the file is meant to be readable and hand-editable.
         Assert.Contains("\"Raw\"", json);
         Assert.Contains("\n", json);

@@ -13,7 +13,7 @@ public static class AgentPrimer
 
         string list = string.Join(
             Environment.NewLine,
-            neighbors.Select(neighbor => $"- {neighbor.Id}  {Kind(neighbor)}  {neighbor.Title}"));
+            neighbors.Select(neighbor => $"- {neighbor.Id}  {NodeKinds.Label(neighbor)}  {neighbor.Title}"));
         string block =
             $"{Start}{Environment.NewLine}" +
             "Este terminal roda dentro do Tether. Antes de dizer que nao consegue acessar outro no, execute `tether list`." + Environment.NewLine +
@@ -47,7 +47,4 @@ public static class AgentPrimer
         File.WriteAllText(temporary, updated);
         File.Move(temporary, path, overwrite: true);
     }
-
-    private static string Kind(NodeBase node) =>
-        node switch { TerminalNode => "terminal", BrowserNode => "browser", _ => "note" };
 }

@@ -71,7 +71,10 @@ public sealed partial class MainWindow : Window
             _fileTreeRefresh?.Cancel();
             _tetherServer.Dispose();
             foreach (var node in _nodes)
+            {
                 if (node.Node is TerminalNodeView terminal) terminal.DisposeSession();
+                if (node.Node is BrowserNodeView browser) browser.CloseWeb();
+            }
         };
     }
 

@@ -68,6 +68,7 @@ public sealed partial class MainWindow
 
         if (ReferenceEquals(_wireSource, entry)) CancelWire();
         if (ReferenceEquals(_selectedNode, entry)) SelectNode(null);
+        if (entry.Node is BrowserNodeView browser) browser.CloseWeb();
         _nodes.Remove(entry);
         entry.Tab.Nodes.Remove(entry.Model);
         entry.Tab.Connections.RemoveAll(c => c.SourceId == entry.Model.Id || c.TargetId == entry.Model.Id);
@@ -230,6 +231,8 @@ public sealed partial class MainWindow
         SelectNode(null);
         _selectedWire = null;
         foreach (var terminal in _terminalViews.Values) terminal.DisposeSession();
+        foreach (var node in _nodes)
+            if (node.Node is BrowserNodeView browser) browser.CloseWeb();
         foreach (var watcher in _noteWatchers.Values) watcher.Dispose();
         _noteReload?.Cancel();
         _fileTreeWatcher?.Dispose();
